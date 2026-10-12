@@ -168,6 +168,23 @@ export function isLaminasiEligibleMaterial(name: string | undefined): boolean {
   );
 }
 
+/**
+ * Returns true only for Art Paper 150 gr (AP 150) — the only material that can
+ * go through the Digital A3+ printing process.
+ * Semua bahan lapisan luar selain AP 150 gr (mis. RCP, Jasmine, Concorde, dll)
+ * hanya bisa diproses via Offset menggunakan ukuran plano aslinya.
+ */
+export function isDigitalPrintEligible(name: string | undefined): boolean {
+  const key = normalizeMaterialKey(name);
+  if (!key) return false;
+  return (
+    key.includes('ap 150') ||
+    key.includes('ap150') ||
+    key.includes('art paper 150') ||
+    key.includes('artpaper 150')
+  );
+}
+
 export function getUniqueMaterialNames(items: MaterialItem[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -864,6 +881,17 @@ export function calculateBoxEstimation(
   }
 
   // Candidate 1: Digital A3+ (from digitalItems)
+  // Aturan: Digital HANYA tersedia jika lapisan luar adalah Art Paper 150 gr (AP 150).
+  // Bahan lain (RCP, Jasmine, Concorde, dll) hanya bisa diproses via Offset
+  // menggunakan ukuran plano asli bahan tersebut (mis. 109 x 79 untuk RCP).
+  const bodyIsDigitalEligible = hasOuterBody
+    ? isDigitalPrintEligible(input.lBodyLuarName)
+    : true; // jika tidak ada lapisan body, tidak menghambat
+  const tutupIsDigitalEligible = hasOuterTutup
+    ? isDigitalPrintEligible(input.lTutupLuarName)
+    : true; // jika tidak ada lapisan tutup, tidak menghambat
+  const isDigitalCandidateAllowed = bodyIsDigitalEligible && tutupIsDigitalEligible;
+
   const digitalMachine = databases.digitalItems[0];
   const digitalRawDim = parseDimensions(digitalMachine?.ukuranArea || '32 x 48');
   const digMaxW = Math.max(digitalRawDim.w, digitalRawDim.h) - 0.5; // 47.5 cm
@@ -909,16 +937,17 @@ export function calculateBoxEstimation(
     };
   };
 
-  const digBody = hasOuterBody
+  const digBody = isDigitalCandidateAllowed && hasOuterBody
     ? calcDigitalPiece(cutLuarBody.p, cutLuarBody.l)
-    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: true };
-  const digTutup = hasOuterTutup
+    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: isDigitalCandidateAllowed };
+  const digTutup = isDigitalCandidateAllowed && hasOuterTutup
     ? calcDigitalPiece(cutLuarTutup.p, cutLuarTutup.l)
-    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: true };
+    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: isDigitalCandidateAllowed };
 
   const printComparisons: PrintComparisonOption[] = [];
 
-  if (digBody.isValid && digTutup.isValid) {
+  // Hanya tambahkan kandidat Digital jika bahan memenuhi syarat (AP 150 gr)
+  if (isDigitalCandidateAllowed && digBody.isValid && digTutup.isValid) {
     const totalDigitalClicks = digBody.clicks + digTutup.clicks;
     const digitalPrintCost = totalDigitalClicks * digitalRate;
     const digitalTotalOptionCost = digitalPrintCost + sharedLaminasiCost;

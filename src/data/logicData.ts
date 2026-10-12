@@ -112,10 +112,10 @@ export const INITIAL_LOGIKA_MODEL_DATA: LogicRuleItem[] = [
 export const INITIAL_LOGIKA_MESIN_DATA: LogicRuleItem[] = [
   {
     id: 'lme-1',
-    namaAturan: 'Pemilihan Proses Cetak',
+    namaAturan: 'Pemilihan Proses Cetak – AP 150 gr',
     kondisiTrigger: 'Bahan = AP 150 gr',
     rumusTindakan: 'Cek Digital dan Offset',
-    keterangan: 'AP 150 gr dapat diproses melalui Digital maupun Offset',
+    keterangan: 'AP 150 gr dapat diproses melalui Digital maupun Offset. Sistem akan membandingkan kedua opsi dan memilih yang termurah.',
     aksi: 'Ambil data mesin yang tersedia',
   },
   {
@@ -129,11 +129,29 @@ export const INITIAL_LOGIKA_MESIN_DATA: LogicRuleItem[] = [
   },
   {
     id: 'lme-3',
-    namaAturan: 'Fallback ke Offset',
+    namaAturan: 'Fallback ke Offset (AP 150 terlalu besar)',
     kondisiTrigger: 'Bahan = AP 150 gr AND bentangan > ukuran maksimal Digital',
     rumusTindakan: 'Digital = Tidak Valid → Cek Offset',
     keterangan: 'Jika tidak masuk Digital, sistem naik ke mesin Offset',
     aksi: 'Cek Mesin 52 dan 58',
+  },
+  {
+    id: 'lme-7',
+    namaAturan: 'Bahan Selain AP 150 gr → Langsung ke Offset',
+    kondisiTrigger: 'Bahan ≠ AP 150 gr (mis. RCP, Jasmine, Concorde, Linen, dll)',
+    rumusTindakan: 'Digital = Tidak Tersedia → Langsung ke Offset',
+    keterangan:
+      'Bahan selain AP 150 gr tidak bisa diproses via mesin Digital A3+. Sistem langsung menghitung via Offset menggunakan ukuran plano asli bahan (mis. RCP → plano 109 x 79 cm), karena ukurannya muat lebih banyak dan lebih efisien.',
+    aksi: 'Skip Digital → Langsung Cek Mesin Offset',
+  },
+  {
+    id: 'lme-8',
+    namaAturan: 'Ukuran Plano Bahan Non-AP150 → Gunakan Ukuran Asli',
+    kondisiTrigger: 'Bahan ≠ AP 150 gr AND proses = Offset',
+    rumusTindakan: 'Plano = Ukuran asli bahan (mis. 109 x 79, bukan 32 x 48)',
+    keterangan:
+      'Untuk bahan lapisan luar selain AP 150, ukuran plano yang digunakan adalah ukuran asli dari database bahan (mis. RCP 109 x 79 cm), bukan ukuran digital. Satu plano bisa muat lebih banyak pcs sehingga lebih efisien biaya kertas.',
+    aksi: 'Hitung fit berdasarkan ukuran plano asli bahan',
   },
   {
     id: 'lme-4',
