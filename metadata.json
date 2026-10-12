@@ -1,0 +1,6 @@
+{
+  "name": "PAKEBOX STUDIO",
+  "description": "Aplikasi kalkulator box custom, manajemen data bahan, cetak, dan database biaya finishing jasa rakit dengan tema Dark Green Gold.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
