@@ -27,6 +27,7 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  Truck,
   Wrench,
   X,
 } from 'lucide-react';
@@ -83,10 +84,12 @@ type MenuKey =
   | 'kalkulator-box'
   | 'paperbag'
   | 'softbox'
+  | 'hitung-ongkir'
   | 'data-bahan'
   | 'data-proses'
   | 'biaya-finishing'
   | 'rumus-model'
+  | 'modal-ongkir'
   | 'ketentuan-logika'
   | 'pengaturan';
 
@@ -104,6 +107,7 @@ const KALKULATOR_CHILDREN: MenuItem[] = [
   { id: 'kalkulator-box', label: 'Hardbox', icon: Box, inKalkulatorGroup: true },
   { id: 'paperbag', label: 'Paperbag', icon: ShoppingBag, inKalkulatorGroup: true },
   { id: 'softbox', label: 'Softbox', icon: Package, inKalkulatorGroup: true },
+  { id: 'hitung-ongkir', label: 'Hitung Ongkir', icon: Truck, inKalkulatorGroup: true },
 ];
 
 const MODAL_KALKULATOR_CHILDREN: MenuItem[] = [
@@ -111,6 +115,7 @@ const MODAL_KALKULATOR_CHILDREN: MenuItem[] = [
   { id: 'data-proses', label: 'Data Proses', icon: Printer, inModalKalkulatorGroup: true },
   { id: 'biaya-finishing', label: 'Biaya Finishing', icon: Wrench, inModalKalkulatorGroup: true },
   { id: 'rumus-model', label: 'Rumus Model', icon: BookOpen, inModalKalkulatorGroup: true },
+  { id: 'modal-ongkir', label: 'Modal Ongkir', icon: Truck, inModalKalkulatorGroup: true },
 ];
 
 const ALL_MENU_ITEMS: MenuItem[] = [
@@ -183,7 +188,16 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_LOGIKA_MODEL);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: LogicRuleItem) => item.id));
+          const missing = INITIAL_LOGIKA_MODEL_DATA.filter((item) => !existingIds.has(item.id));
+          if (missing.length > 0) {
+            const merged = [...parsed, ...missing];
+            localStorage.setItem(STORAGE_KEY_LOGIKA_MODEL, JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
       }
     } catch {
       // Fallback
@@ -196,7 +210,16 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_LOGIKA_MESIN);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: LogicRuleItem) => item.id));
+          const missing = INITIAL_LOGIKA_MESIN_DATA.filter((item) => !existingIds.has(item.id));
+          if (missing.length > 0) {
+            const merged = [...parsed, ...missing];
+            localStorage.setItem(STORAGE_KEY_LOGIKA_MESIN, JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
       }
     } catch {
       // Fallback
@@ -469,6 +492,7 @@ export default function App() {
   const [calcQty, setCalcQty] = useState<string>('0');
   const [calcError, setCalcError] = useState<string>('');
   const [calcResult, setCalcResult] = useState<BoxCalculationResult | null>(null);
+  const [selectedPrintIndex, setSelectedPrintIndex] = useState<number | undefined>(undefined);
 
   const uniqueBahanDasarNames = useMemo(
     () => getUniqueMaterialNames(bahanDasarItems),
@@ -616,10 +640,11 @@ export default function App() {
     setCalcLogoList([]);
     setCalcQty('0');
     setCalcError('');
+    setSelectedPrintIndex(undefined);
     setCalcResult(null);
   };
 
-  const handleHitungHarga = () => {
+  const executeBoxCalculation = (overridePrintIndex?: number) => {
     const pVal = parseFloat((calcP || '0').replace(',', '.'));
     const lVal = parseFloat((calcL || '0').replace(',', '.'));
     const tVal = parseFloat((calcT || '0').replace(',', '.'));
@@ -657,6 +682,7 @@ export default function App() {
             customP: parseFloat((item.customP || '0').replace(',', '.')) || 0,
             customL: parseFloat((item.customL || '0').replace(',', '.')) || 0,
           })),
+        selectedPrintIndex: overridePrintIndex,
       },
       {
         formulaItems,
@@ -670,10 +696,21 @@ export default function App() {
         logoItems,
         finishingItems,
         logikaModelItems,
+        logikaMesinItems,
         logikaProsesItems,
       }
     );
     setCalcResult(res);
+  };
+
+  const handleHitungHarga = () => {
+    setSelectedPrintIndex(undefined);
+    executeBoxCalculation(undefined);
+  };
+
+  const handleSelectPrintOption = (idx: number | undefined) => {
+    setSelectedPrintIndex(idx);
+    executeBoxCalculation(idx);
   };
 
   // Sync to localStorage
@@ -1426,59 +1463,59 @@ export default function App() {
       {/* Left Sidebar Navigation */}
       <aside
         aria-label="Sidebar Menu Utama PAKEBOX STUDIO"
-        className={`fixed inset-y-0 left-0 z-50 flex w-68 shrink-0 flex-col border-r border-[#D4AF37]/20 bg-[#0A1B14] transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-52 shrink-0 flex-col border-r border-[#D4AF37]/20 bg-[#0A1B14] transition-transform duration-200 lg:static lg:translate-x-0 ${
           isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Brand Header inside Sidebar */}
-        <div className="flex items-center justify-between border-b border-[#D4AF37]/15 px-6 py-5">
+        <div className="flex items-center justify-between border-b border-[#D4AF37]/15 px-3.5 py-3">
           <a
             href="#top"
             onClick={(e) => {
               e.preventDefault();
               handleSelectMenu('data-proses');
             }}
-            className="font-display text-lg font-bold tracking-wider text-[#E5C158] hover:text-[#F3D77D] transition-colors whitespace-nowrap"
+            className="font-display text-sm font-bold tracking-wider text-[#E5C158] hover:text-[#F3D77D] transition-colors whitespace-nowrap"
           >
             PAKEBOX STUDIO
           </a>
 
           <button
             onClick={() => setIsMobileSidebarOpen(false)}
-            className="rounded-lg p-1.5 text-[#94A89B] hover:bg-[#122D22] hover:text-[#F4F1EA] lg:hidden cursor-pointer"
+            className="rounded-lg p-1 text-[#94A89B] hover:bg-[#122D22] hover:text-[#F4F1EA] lg:hidden cursor-pointer"
             aria-label="Tutup menu"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Navigation Menu List */}
-        <nav className="flex-1 space-y-1.5 overflow-y-auto px-3.5 py-5">
+        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
           {/* 1. Collapsible Group: Kalkulator (Hardbox, Paperbag, Softbox) */}
           <div>
             <button
               onClick={() => setIsKalkulatorOpen((prev) => !prev)}
               aria-expanded={isKalkulatorOpen}
-              className={`flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`flex w-full items-center justify-between gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 isChildOfKalkulator
                   ? 'border border-[#D4AF37]/35 bg-[#122D22] text-[#E5C158]'
                   : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
               }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <Calculator className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+              <div className="flex items-center gap-2 min-w-0">
+                <Calculator className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
                 <span className="truncate">Kalkulator</span>
               </div>
               {isKalkulatorOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
               ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-[#94A89B]" />
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94A89B]" />
               )}
             </button>
 
             {/* Submenu Items inside Kalkulator */}
             {isKalkulatorOpen && (
-              <div className="mt-1.5 ml-4 space-y-1 border-l border-[#D4AF37]/25 pl-3">
+              <div className="mt-0.5 ml-2 space-y-0.5 border-l border-[#D4AF37]/25 pl-2">
                 {KALKULATOR_CHILDREN.map((subMenu) => {
                   const Icon = subMenu.icon;
                   const isActive = activeMenu === subMenu.id;
@@ -1486,14 +1523,14 @@ export default function App() {
                     <button
                       key={subMenu.id}
                       onClick={() => handleSelectMenu(subMenu.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[11px] font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                         isActive
-                          ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                          ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                           : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
                       }`}
                     >
                       <Icon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-3 w-3 shrink-0 ${
                           isActive ? 'text-[#07140F]' : 'text-[#D4AF37]'
                         }`}
                       />
@@ -1506,30 +1543,30 @@ export default function App() {
           </div>
 
           {/* 2. Collapsible Group: Modal Kalkulator */}
-          <div className="pt-1">
+          <div className="pt-0.5">
             <button
               onClick={() => setIsModalKalkulatorOpen((prev) => !prev)}
               aria-expanded={isModalKalkulatorOpen}
-              className={`flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`flex w-full items-center justify-between gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 isChildOfModalKalkulator
                   ? 'border border-[#D4AF37]/35 bg-[#122D22] text-[#E5C158]'
                   : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
               }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <FolderKanban className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+              <div className="flex items-center gap-2 min-w-0">
+                <FolderKanban className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
                 <span className="truncate">Modal Kalkulator</span>
               </div>
               {isModalKalkulatorOpen ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-[#D4AF37]" />
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#D4AF37]" />
               ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-[#94A89B]" />
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#94A89B]" />
               )}
             </button>
 
             {/* Submenu Items inside Modal Kalkulator */}
             {isModalKalkulatorOpen && (
-              <div className="mt-1.5 ml-4 space-y-1 border-l border-[#D4AF37]/25 pl-3">
+              <div className="mt-0.5 ml-2 space-y-0.5 border-l border-[#D4AF37]/25 pl-2">
                 {MODAL_KALKULATOR_CHILDREN.map((subMenu) => {
                   const Icon = subMenu.icon;
                   const isActive = activeMenu === subMenu.id;
@@ -1537,14 +1574,14 @@ export default function App() {
                     <button
                       key={subMenu.id}
                       onClick={() => handleSelectMenu(subMenu.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[11px] font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                         isActive
-                          ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                          ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                           : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
                       }`}
                     >
                       <Icon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-3 w-3 shrink-0 ${
                           isActive ? 'text-[#07140F]' : 'text-[#D4AF37]'
                         }`}
                       />
@@ -1559,14 +1596,14 @@ export default function App() {
           {/* 3. Ketentuan Logika */}
           <button
             onClick={() => handleSelectMenu('ketentuan-logika')}
-            className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
               activeMenu === 'ketentuan-logika'
-                ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                 : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
             }`}
           >
             <Lightbulb
-              className={`h-4 w-4 shrink-0 ${
+              className={`h-3.5 w-3.5 shrink-0 ${
                 activeMenu === 'ketentuan-logika'
                   ? 'text-[#07140F]'
                   : 'text-[#D4AF37]'
@@ -1576,17 +1613,17 @@ export default function App() {
           </button>
 
           {/* Divider before Pengaturan */}
-          <div className="my-3 border-t border-[#D4AF37]/15 pt-3">
+          <div className="my-1.5 border-t border-[#D4AF37]/15 pt-1.5">
             <button
               onClick={() => handleSelectMenu('pengaturan')}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                 activeMenu === 'pengaturan'
-                  ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                  ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                   : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
               }`}
             >
               <Settings
-                className={`h-4 w-4 shrink-0 ${
+                className={`h-3.5 w-3.5 shrink-0 ${
                   activeMenu === 'pengaturan'
                     ? 'text-[#07140F]'
                     : 'text-[#D4AF37]'
@@ -1598,10 +1635,10 @@ export default function App() {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="border-t border-[#D4AF37]/15 p-4 space-y-2.5">
-          <div className="flex items-center justify-between text-xs text-[#8FA599] px-1">
+        <div className="border-t border-[#D4AF37]/15 p-2 space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] text-[#8FA599] px-1">
             <span>Mode Aplikasi</span>
-            <span>Client-Side PWA</span>
+            <span>Client PWA</span>
           </div>
           <div className="flex flex-col">
             <PWAInstallButton />
@@ -1613,17 +1650,17 @@ export default function App() {
       <div className="flex flex-1 flex-col min-w-0">
         {/* Top Bar Contract: Context Breadcrumb — Primary Actions */}
         <header className="border-b border-[#D4AF37]/20 bg-[#07140F]/90 backdrop-blur-md">
-          <div className="flex items-center justify-between px-4 py-3.5 sm:px-8">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between px-3 py-2 sm:px-5">
+            <div className="flex items-center gap-2.5">
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="rounded-lg border border-[#D4AF37]/25 bg-[#0C2017] p-2 text-[#E5C158] hover:bg-[#122D22] lg:hidden cursor-pointer"
+                className="rounded-lg border border-[#D4AF37]/25 bg-[#0C2017] p-1.5 text-[#E5C158] hover:bg-[#122D22] lg:hidden cursor-pointer"
                 aria-label="Buka menu navigasi"
               >
-                <Menu className="h-5 w-5" />
+                <Menu className="h-4 w-4" />
               </button>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-[#94A89B]">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs text-[#94A89B]">
                 <span>PAKEBOX STUDIO</span>
                 {isChildOfKalkulator && (
                   <>
@@ -1668,7 +1705,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               {(activeMenu === 'data-bahan' ||
                 activeMenu === 'data-proses' ||
                 activeMenu === 'biaya-finishing' ||
@@ -1676,10 +1713,10 @@ export default function App() {
                 activeMenu === 'ketentuan-logika') && (
                 <button
                   onClick={handleResetCurrentMenu}
-                  className="flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/25 bg-[#0C2017] px-3 py-2 text-xs font-medium text-[#B8C7BE] hover:border-[#D4AF37]/50 hover:text-[#F3D77D] transition-colors whitespace-nowrap cursor-pointer"
+                  className="flex items-center gap-1.5 rounded-md border border-[#D4AF37]/25 bg-[#0C2017] px-2.5 py-1 text-[11px] font-medium text-[#B8C7BE] hover:border-[#D4AF37]/50 hover:text-[#F3D77D] transition-colors whitespace-nowrap cursor-pointer"
                   title="Kembalikan data referensi awal"
                 >
-                  <RotateCcw className="h-3.5 w-3.5 text-[#D4AF37]" />
+                  <RotateCcw className="h-3 w-3 text-[#D4AF37]" />
                   <span>Reset Referensi</span>
                 </button>
               )}
@@ -1688,45 +1725,45 @@ export default function App() {
         </header>
 
         {/* Main Viewport */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+        <main className="flex-1 p-3 sm:p-4 lg:p-4 overflow-x-hidden">
           {activeMenu === 'kalkulator-box' ? (
             /* Kalkulator Box View: 2 Cards (Kiri: Penginputan Data, Kanan: Ringkasan Estimasi) */
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
               {/* CARD KIRI: Penginputan Data untuk Proses Hitung */}
-              <section className="xl:col-span-7 rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-7 shadow-xl">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-5 border-b border-[#D4AF37]/15">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2.5">
-                      <Calculator className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                      <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+              <section className="xl:col-span-7 rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-4 shadow-lg">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-[#D4AF37]/15">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                      <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                         Penginputan Data Proses Hitung
                       </h1>
                     </div>
-                    <p className="text-xs sm:text-sm text-[#8FA599]">
-                      Pilih model box, input ukuran dimensi (P x L x T), bahan dasar, pelapis kertas, dan kuantitas
+                    <p className="text-[11px] text-[#8FA599]">
+                      Pilih model box, dimensi (P x L x T), bahan dasar, pelapis kertas, dan kuantitas
                     </p>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleResetCalculatorInputs}
-                    className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-2 text-xs font-semibold text-[#B8C7BE] hover:border-[#D4AF37]/50 hover:text-[#F3D77D] transition-colors cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-md border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1 text-[11px] font-semibold text-[#B8C7BE] hover:border-[#D4AF37]/50 hover:text-[#F3D77D] transition-colors cursor-pointer shrink-0"
                   >
-                    <RotateCcw className="h-3.5 w-3.5 text-[#D4AF37]" />
+                    <RotateCcw className="h-3 w-3 text-[#D4AF37]" />
                     <span>Reset Input</span>
                   </button>
                 </div>
 
-                <div className="mt-6 space-y-5">
+                <div className="mt-3.5 space-y-3">
                   {/* 1. Model Box (Ambil dari Rumus Model) */}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
                       Model Box
                     </label>
                     <select
                       value={calcModelId}
                       onChange={(e) => setCalcModelId(e.target.value)}
-                      className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-4 py-3 text-sm font-medium text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                      className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-1.5 text-xs font-medium text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                     >
                       <option value="">-- Pilih Model Box --</option>
                       {formulaItems.map((model) => (
@@ -1739,22 +1776,22 @@ export default function App() {
 
                   {/* 2. Ukuran Box: P x L x T */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158]">
                         Ukuran Box : P x L x T (cm)
                       </label>
-                      <span className="text-[11px] text-[#8FA599]">
+                      <span className="text-[10px] text-[#8FA599]">
                         Ketik langsung atau hapus angka 0
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       {/* Panjang (P) */}
-                      <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-3 focus-within:border-[#D4AF37] transition-colors">
-                        <label className="block text-[11px] font-semibold text-[#94A89B] mb-1">
+                      <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-2 focus-within:border-[#D4AF37] transition-colors">
+                        <label className="block text-[10px] font-semibold text-[#94A89B] mb-0.5">
                           Panjang (P)
                         </label>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1762,18 +1799,18 @@ export default function App() {
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleCalcNumberChange(e.target.value, setCalcP)}
                             placeholder="0"
-                            className="w-full bg-transparent font-mono-tabular text-base sm:text-lg font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
+                            className="w-full bg-transparent font-mono-tabular text-sm sm:text-base font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
                           />
-                          <span className="text-xs font-medium text-[#8FA599]">cm</span>
+                          <span className="text-[10px] font-medium text-[#8FA599]">cm</span>
                         </div>
                       </div>
 
                       {/* Lebar (L) */}
-                      <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-3 focus-within:border-[#D4AF37] transition-colors">
-                        <label className="block text-[11px] font-semibold text-[#94A89B] mb-1">
+                      <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-2 focus-within:border-[#D4AF37] transition-colors">
+                        <label className="block text-[10px] font-semibold text-[#94A89B] mb-0.5">
                           Lebar (L)
                         </label>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1781,18 +1818,18 @@ export default function App() {
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleCalcNumberChange(e.target.value, setCalcL)}
                             placeholder="0"
-                            className="w-full bg-transparent font-mono-tabular text-base sm:text-lg font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
+                            className="w-full bg-transparent font-mono-tabular text-sm sm:text-base font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
                           />
-                          <span className="text-xs font-medium text-[#8FA599]">cm</span>
+                          <span className="text-[10px] font-medium text-[#8FA599]">cm</span>
                         </div>
                       </div>
 
                       {/* Tinggi (T) */}
-                      <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-3 focus-within:border-[#D4AF37] transition-colors">
-                        <label className="block text-[11px] font-semibold text-[#94A89B] mb-1">
+                      <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-2 focus-within:border-[#D4AF37] transition-colors">
+                        <label className="block text-[10px] font-semibold text-[#94A89B] mb-0.5">
                           Tinggi (T)
                         </label>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1800,24 +1837,24 @@ export default function App() {
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => handleCalcNumberChange(e.target.value, setCalcT)}
                             placeholder="0"
-                            className="w-full bg-transparent font-mono-tabular text-base sm:text-lg font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
+                            className="w-full bg-transparent font-mono-tabular text-sm sm:text-base font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
                           />
-                          <span className="text-xs font-medium text-[#8FA599]">cm</span>
+                          <span className="text-[10px] font-medium text-[#8FA599]">cm</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* 3. Bahan Body & Bahan Tutup (Hanya Nama Bahan) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        Bahan Body <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Bahan Dasar)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        Bahan Body <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Bahan Dasar)</span>
                       </label>
                       <select
                         value={calcBahanBodyName}
                         onChange={(e) => setCalcBahanBodyName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih Bahan Body --</option>
                         {uniqueBahanDasarNames.map((name) => (
@@ -1829,13 +1866,13 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        Bahan Tutup <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Bahan Dasar)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        Bahan Tutup <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Bahan Dasar)</span>
                       </label>
                       <select
                         value={calcBahanTutupName}
                         onChange={(e) => setCalcBahanTutupName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih Bahan Tutup / Tidak Pakai --</option>
                         {uniqueBahanDasarNames.map((name) => (
@@ -1848,15 +1885,15 @@ export default function App() {
                   </div>
 
                   {/* 4. L. Body Dalam & L. Body Luar (Hanya Nama Kertas Std & Premium) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        L. Body Dalam <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        L. Body Dalam <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
                       </label>
                       <select
                         value={calcLBodyDalamName}
                         onChange={(e) => setCalcLBodyDalamName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih L. Body Dalam --</option>
                         <optgroup label="Kertas Std">
@@ -1877,13 +1914,13 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        L. Body Luar <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        L. Body Luar <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
                       </label>
                       <select
                         value={calcLBodyLuarName}
                         onChange={(e) => setCalcLBodyLuarName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih L. Body Luar --</option>
                         <optgroup label="Kertas Std">
@@ -1905,15 +1942,15 @@ export default function App() {
                   </div>
 
                   {/* 5. L. Tutup Dalam & L. Tutup Luar (Hanya Nama Kertas Std & Premium) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        L. Tutup Dalam <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        L. Tutup Dalam <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
                       </label>
                       <select
                         value={calcLTutupDalamName}
                         onChange={(e) => setCalcLTutupDalamName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih L. Tutup Dalam / Tidak Pakai --</option>
                         <optgroup label="Kertas Std">
@@ -1934,13 +1971,13 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158] mb-2">
-                        L. Tutup Luar <span className="text-[11px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158] mb-1">
+                        L. Tutup Luar <span className="text-[10px] font-normal text-[#8FA599] normal-case">(Std / Premium)</span>
                       </label>
                       <select
                         value={calcLTutupLuarName}
                         onChange={(e) => setCalcLTutupLuarName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-3 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                        className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                       >
                         <option value="">-- Pilih L. Tutup Luar / Tidak Pakai --</option>
                         <optgroup label="Kertas Std">
@@ -1962,37 +1999,37 @@ export default function App() {
                   </div>
 
                   {/* 6. Innerbox (Default Kosong, Klik Tambah untuk Pilih Nama Bahan dari Data Innerbox) */}
-                  <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610]/70 p-4">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610]/70 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
                       <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158]">
+                        <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158]">
                           Innerbox
                         </label>
-                        <p className="text-[11px] text-[#8FA599] mt-0.5">
+                        <p className="text-[10px] text-[#8FA599]">
                           {calcInnerboxList.length === 0
                             ? 'Default kosong (Tanpa Innerbox). Klik tombol tambah jika menggunakan innerbox.'
-                            : `${calcInnerboxList.length} komponen innerbox dipilih dari Data Innerbox.`}
+                            : `${calcInnerboxList.length} komponen innerbox dipilih.`}
                         </p>
                       </div>
 
                       <button
                         type="button"
                         onClick={handleAddCalcInnerbox}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-3.5 py-2 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shrink-0 shadow-xs"
+                        className="inline-flex items-center gap-1 rounded-md bg-[#D4AF37] px-2.5 py-1 text-[11px] font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shrink-0 shadow-xs"
                       >
-                        <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                        <Plus className="h-3 w-3 stroke-[2.5]" />
                         <span>Tambah Inner</span>
                       </button>
                     </div>
 
                     {calcInnerboxList.length > 0 && (
-                      <div className="mt-3.5 space-y-2.5 border-t border-[#D4AF37]/15 pt-3.5">
+                      <div className="mt-2 space-y-1.5 border-t border-[#D4AF37]/15 pt-2">
                         {calcInnerboxList.map((selectedInnerName, idx) => (
-                          <div key={idx} className="flex items-center gap-2.5">
+                          <div key={idx} className="flex items-center gap-1.5">
                             <select
                               value={selectedInnerName}
                               onChange={(e) => handleUpdateCalcInnerbox(idx, e.target.value)}
-                              className="flex-1 rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] px-3.5 py-2.5 text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                              className="flex-1 rounded-md border border-[#D4AF37]/25 bg-[#0C2017] px-2.5 py-1.5 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                             >
                               <option value="">-- Pilih Bahan Innerbox --</option>
                               {uniqueInnerboxNames.map((name) => (
@@ -2005,10 +2042,10 @@ export default function App() {
                             <button
                               type="button"
                               onClick={() => handleRemoveCalcInnerbox(idx)}
-                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                               title="Hapus Innerbox"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         ))}
@@ -2017,31 +2054,31 @@ export default function App() {
                   </div>
 
                   {/* 6B. Tambah Logo (Ambil dari Data Proses / Logo: Pilihan Std vs Custom) */}
-                  <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610]/70 p-4">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610]/70 p-2.5">
+                    <div className="flex items-center justify-between gap-2">
                       <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158]">
+                        <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158]">
                           Logo
                         </label>
-                        <p className="text-[11px] text-[#8FA599] mt-0.5">
+                        <p className="text-[10px] text-[#8FA599]">
                           {calcLogoList.length === 0
-                            ? 'Default kosong (Tanpa Logo). Klik tombol Tambah Logo untuk memilih dari Data Proses / Logo.'
-                            : `${calcLogoList.length} proses logo dipilih dari Data Proses / Logo.`}
+                            ? 'Default kosong (Tanpa Logo). Klik tombol Tambah Logo jika menggunakan logo.'
+                            : `${calcLogoList.length} proses logo dipilih.`}
                         </p>
                       </div>
 
                       <button
                         type="button"
                         onClick={handleAddCalcLogo}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-3.5 py-2 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shrink-0 shadow-xs"
+                        className="inline-flex items-center gap-1 rounded-md bg-[#D4AF37] px-2.5 py-1 text-[11px] font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shrink-0 shadow-xs"
                       >
-                        <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                        <Plus className="h-3 w-3 stroke-[2.5]" />
                         <span>Tambah Logo</span>
                       </button>
                     </div>
 
                     {calcLogoList.length > 0 && (
-                      <div className="mt-3.5 space-y-3 border-t border-[#D4AF37]/15 pt-3.5">
+                      <div className="mt-2 space-y-2 border-t border-[#D4AF37]/15 pt-2">
                         {calcLogoList.map((logoEntry, idx) => {
                           const selectedLogoObj = logoItems.find(
                             (l) => l.id === logoEntry.logoId
@@ -2069,14 +2106,14 @@ export default function App() {
                           return (
                             <div
                               key={idx}
-                              className="rounded-xl border border-[#D4AF37]/20 bg-[#0C2017] p-3.5 space-y-3"
+                              className="rounded-lg border border-[#D4AF37]/20 bg-[#0C2017] p-2.5 space-y-2"
                             >
-                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 {/* Pilihan Jenis Logo dari Data Proses / Logo */}
                                 <select
                                   value={logoEntry.logoId}
                                   onChange={(e) => handleUpdateCalcLogoId(idx, e.target.value)}
-                                  className="flex-1 rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 text-sm font-medium text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                                  className="flex-1 rounded-md border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 text-xs font-medium text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                                 >
                                   <option value="">-- Pilih Jenis Logo --</option>
                                   {logoItems.map((logo) => (
@@ -2096,7 +2133,7 @@ export default function App() {
                                         e.target.value as LogoVariantType
                                       )
                                     }
-                                    className="flex-1 rounded-xl border border-[#D4AF37]/35 bg-[#081610] px-3.5 py-2.5 text-sm font-semibold text-[#E5C158] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
+                                    className="flex-1 rounded-md border border-[#D4AF37]/35 bg-[#081610] px-2.5 py-1.5 text-xs font-semibold text-[#E5C158] focus:border-[#D4AF37] focus:outline-none transition-colors cursor-pointer"
                                   >
                                     <option value="std">{namaJenisLogo} Std</option>
                                     <option value="custom">{namaJenisLogo} Custom</option>
@@ -2106,21 +2143,21 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveCalcLogo(idx)}
-                                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center self-end sm:self-auto rounded-xl border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center self-end sm:self-auto rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                   title="Hapus Logo"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </button>
                               </div>
 
                               {/* Tombol Cepat & Info Rumus untuk Std vs Custom */}
                               {selectedLogoObj && (
-                                <div className="space-y-2.5 pt-1 border-t border-[#D4AF37]/15">
-                                  <div className="flex flex-wrap items-center gap-2">
+                                <div className="space-y-1.5 pt-1 border-t border-[#D4AF37]/15">
+                                  <div className="flex flex-wrap items-center gap-1.5">
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateCalcLogoVariant(idx, 'std')}
-                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
                                         logoEntry.variant === 'std'
                                           ? 'bg-[#D4AF37] text-[#07140F]'
                                           : 'border border-[#D4AF37]/25 bg-[#081610] text-[#A9BEB2] hover:text-[#F3D77D]'
@@ -2131,7 +2168,7 @@ export default function App() {
                                     <button
                                       type="button"
                                       onClick={() => handleUpdateCalcLogoVariant(idx, 'custom')}
-                                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                      className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
                                         logoEntry.variant === 'custom'
                                           ? 'bg-[#D4AF37] text-[#07140F]'
                                           : 'border border-[#D4AF37]/25 bg-[#081610] text-[#A9BEB2] hover:text-[#F3D77D]'
@@ -2142,21 +2179,21 @@ export default function App() {
                                   </div>
 
                                   {logoEntry.variant === 'std' ? (
-                                    <div className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2 text-xs text-[#B8C7BE] font-mono-tabular">
+                                    <div className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1.5 text-[11px] text-[#B8C7BE] font-mono-tabular">
                                       <span className="font-semibold text-[#E5C158]">
                                         {namaJenisLogo} Std
                                       </span>{' '}
-                                      : Harga Minimal ({formatRupiah(biayaMinVal)}) + Rp 50.000 ={' '}
+                                      : Min ({formatRupiah(biayaMinVal)}) + Rp 50.000 ={' '}
                                       <span className="font-bold text-[#F3D77D]">
                                         {formatRupiah(stdPricePreview)}
                                       </span>
                                     </div>
                                   ) : (
-                                    <div className="space-y-2">
-                                      <div className="grid grid-cols-2 gap-2.5">
-                                        <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] px-3 py-2">
-                                          <label className="block text-[10px] font-semibold text-[#94A89B] mb-0.5">
-                                            P Logo Custom (cm)
+                                    <div className="space-y-1.5">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="rounded-md border border-[#D4AF37]/20 bg-[#081610] px-2.5 py-1.5">
+                                          <label className="block text-[9px] font-semibold text-[#94A89B] mb-0.5">
+                                            P Logo (cm)
                                           </label>
                                           <input
                                             type="text"
@@ -2171,12 +2208,12 @@ export default function App() {
                                               )
                                             }
                                             placeholder="0"
-                                            className="w-full bg-transparent font-mono-tabular text-sm font-bold text-[#F4F1EA] focus:outline-none"
+                                            className="w-full bg-transparent font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:outline-none"
                                           />
                                         </div>
-                                        <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] px-3 py-2">
-                                          <label className="block text-[10px] font-semibold text-[#94A89B] mb-0.5">
-                                            L Logo Custom (cm)
+                                        <div className="rounded-md border border-[#D4AF37]/20 bg-[#081610] px-2.5 py-1.5">
+                                          <label className="block text-[9px] font-semibold text-[#94A89B] mb-0.5">
+                                            L Logo (cm)
                                           </label>
                                           <input
                                             type="text"
@@ -2191,19 +2228,19 @@ export default function App() {
                                               )
                                             }
                                             placeholder="0"
-                                            className="w-full bg-transparent font-mono-tabular text-sm font-bold text-[#F4F1EA] focus:outline-none"
+                                            className="w-full bg-transparent font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:outline-none"
                                           />
                                         </div>
                                       </div>
 
-                                      <div className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2 text-xs text-[#B8C7BE] font-mono-tabular">
+                                      <div className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1.5 text-[11px] text-[#B8C7BE] font-mono-tabular">
                                         <span className="font-semibold text-[#E5C158]">
                                           {namaJenisLogo} Custom
                                         </span>{' '}
-                                        : Rumus <span className="text-[#F4F1EA]">{selectedLogoObj.rumusLogo}</span>{' '}
+                                        : {selectedLogoObj.rumusLogo}{' '}
                                         {effCustomP > 0 && effCustomL > 0 && (
                                           <>
-                                            → ({effCustomP} x {effCustomL} x {formatRupiah(hargaLogoVal)}) + Rp 50.000 ={' '}
+                                            → ({effCustomP}x{effCustomL}x{formatRupiah(hargaLogoVal)})+50k ={' '}
                                             <span className="font-bold text-[#F3D77D]">
                                               {formatRupiah(customPricePreview)}
                                             </span>
@@ -2223,16 +2260,16 @@ export default function App() {
 
                   {/* 7. Qty (Input Angka Manual) */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#E5C158]">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold uppercase tracking-wider text-[#E5C158]">
                         Qty (Jumlah Pesanan Box)
                       </label>
-                      <span className="text-[11px] text-[#8FA599]">
+                      <span className="text-[10px] text-[#8FA599]">
                         Input angka manual (pcs)
                       </span>
                     </div>
 
-                    <div className="flex items-center rounded-xl border border-[#D4AF37]/25 bg-[#081610] px-4 py-3 focus-within:border-[#D4AF37] transition-colors">
+                    <div className="flex items-center rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-1.5 focus-within:border-[#D4AF37] transition-colors">
                       <input
                         type="text"
                         inputMode="numeric"
@@ -2240,30 +2277,30 @@ export default function App() {
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => handleCalcNumberChange(e.target.value, setCalcQty)}
                         placeholder="0"
-                        className="w-full bg-transparent font-mono-tabular text-base sm:text-lg font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
+                        className="w-full bg-transparent font-mono-tabular text-sm sm:text-base font-bold text-[#F4F1EA] placeholder-[#5E7468] focus:outline-none"
                       />
-                      <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-[#D4AF37]">
+                      <span className="ml-2 text-[11px] font-semibold uppercase tracking-wider text-[#D4AF37]">
                         Pcs
                       </span>
                     </div>
                   </div>
 
                   {calcError && (
-                    <div className="rounded-xl border border-[#F43F5E]/40 bg-[#2A1216] px-4 py-3 text-xs text-[#FDA4AF]">
+                    <div className="rounded-lg border border-[#F43F5E]/40 bg-[#2A1216] px-3 py-2 text-[11px] text-[#FDA4AF]">
                       {calcError}
                     </div>
                   )}
 
                   {/* Informasi Analisis Pisau Pond (+1 cm) & Biaya Pisau (Sebelum Tombol Hitung Harga) */}
-                  <div className="rounded-xl border border-[#D4AF37]/35 bg-[#161B20]/90 px-4 py-3.5 space-y-2 shadow-inner">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-[#E5C158] shrink-0" />
-                      <h4 className="text-xs sm:text-sm font-bold text-[#E5C158]">
+                  <div className="rounded-lg border border-[#D4AF37]/35 bg-[#161B20]/90 px-3 py-2 space-y-1 shadow-inner">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="h-3.5 w-3.5 text-[#E5C158] shrink-0" />
+                      <h4 className="text-xs font-bold text-[#E5C158]">
                         Analisis Pisau Pond (+1 cm) &amp; Biaya Pisau:
                       </h4>
                     </div>
 
-                    <div className="pl-6 space-y-1.5 font-mono-tabular text-xs leading-relaxed">
+                    <div className="pl-5 space-y-0.5 font-mono-tabular text-[11px] leading-relaxed">
                       <div>
                         <span className="font-semibold text-[#E5C158]">
                           - Board Body ({livePondAnalysis.rawBodyP.toFixed(1)} x{' '}
@@ -2271,14 +2308,14 @@ export default function App() {
                         </span>{' '}
                         {livePondAnalysis.isActive ? (
                           <span className="font-semibold text-emerald-400">
-                            AKTIF! +1cm (Menjadi {livePondAnalysis.finalBodyP.toFixed(1)} x{' '}
+                            AKTIF! +1cm ({livePondAnalysis.finalBodyP.toFixed(1)} x{' '}
                             {livePondAnalysis.finalBodyL.toFixed(1)} cm | Pisau:{' '}
                             {formatRupiah(livePondAnalysis.pisauBodyCost)})
                           </span>
                         ) : (
                           <span className="font-semibold text-[#94A89B]">
                             TIDAK AKTIF (Tetap {livePondAnalysis.rawBodyP.toFixed(1)} x{' '}
-                            {livePondAnalysis.rawBodyL.toFixed(1)} cm | Tanpa tambah 1 cm)
+                            {livePondAnalysis.rawBodyL.toFixed(1)} cm)
                           </span>
                         )}
                       </div>
@@ -2290,14 +2327,14 @@ export default function App() {
                         </span>{' '}
                         {livePondAnalysis.isActive ? (
                           <span className="font-semibold text-emerald-400">
-                            AKTIF! +1cm (Menjadi {livePondAnalysis.finalTutupP.toFixed(1)} x{' '}
+                            AKTIF! +1cm ({livePondAnalysis.finalTutupP.toFixed(1)} x{' '}
                             {livePondAnalysis.finalTutupL.toFixed(1)} cm | Pisau:{' '}
                             {formatRupiah(livePondAnalysis.pisauTutupCost)})
                           </span>
                         ) : (
                           <span className="font-semibold text-[#94A89B]">
                             TIDAK AKTIF (Tetap {livePondAnalysis.rawTutupP.toFixed(1)} x{' '}
-                            {livePondAnalysis.rawTutupL.toFixed(1)} cm | Tanpa tambah 1 cm)
+                            {livePondAnalysis.rawTutupL.toFixed(1)} cm)
                           </span>
                         )}
                       </div>
@@ -2322,11 +2359,11 @@ export default function App() {
                   </div>
 
                   {/* 8. Tombol Klik Hitung Harga */}
-                  <div className="pt-2">
+                  <div className="pt-1">
                     <button
                       type="button"
                       onClick={handleHitungHarga}
-                      className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#D4AF37] px-5 py-3.5 text-sm font-bold text-[#07140F] hover:bg-[#E5C158] transition-all duration-150 cursor-pointer shadow-lg"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-bold text-[#07140F] hover:bg-[#E5C158] transition-all duration-150 cursor-pointer shadow-md"
                     >
                       <Calculator className="h-4 w-4 stroke-[2.5]" />
                       <span>Hitung Harga</span>
@@ -2336,42 +2373,42 @@ export default function App() {
               </section>
 
               {/* CARD KANAN: Ringkasan Estimasi */}
-              <section className="xl:col-span-5 rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-7 shadow-xl flex flex-col min-h-[580px]">
-                <div className="pb-5 border-b border-[#D4AF37]/15">
-                  <div className="flex items-center gap-2.5">
-                    <FileText className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                    <h2 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+              <section className="xl:col-span-5 rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-4 shadow-lg flex flex-col min-h-[480px]">
+                <div className="pb-3 border-b border-[#D4AF37]/15">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                    <h2 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                       Ringkasan Estimasi
                     </h2>
                   </div>
-                  <p className="text-xs sm:text-sm text-[#8FA599] mt-1">
-                    Rincian hasil kalkulasi ukuran potong bersih, perbandingan mesin cetak, dan harga modal box
+                  <p className="text-[11px] text-[#8FA599] mt-0.5">
+                    Hasil kalkulasi ukuran potong bersih, perbandingan mesin cetak, dan HPP modal
                   </p>
                 </div>
 
                 {!calcResult ? (
-                  <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 text-center">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-5">
-                      <Calculator className="h-8 w-8" />
+                  <div className="flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                      <Calculator className="h-6 w-6" />
                     </div>
 
-                    <h3 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                    <h3 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                       SIAP HITUNG HARGA
                     </h3>
 
-                    <p className="mt-2 max-w-sm text-xs sm:text-sm text-[#8FA599] leading-relaxed">
+                    <p className="mt-1 max-w-sm text-[11px] text-[#8FA599] leading-relaxed">
                       Masukkan ukuran <strong>P x L x T</strong> serta <strong>Qty</strong> pada card sebelah kiri, lalu klik tombol{' '}
-                      <strong className="text-[#E5C158]">Hitung Harga</strong> untuk menampilkan rincian estimasi lengkap.
+                      <strong className="text-[#E5C158]">Hitung Harga</strong>.
                     </p>
                   </div>
                 ) : (
-                  <div className="mt-5 space-y-6 text-xs sm:text-sm">
+                  <div className="mt-3.5 space-y-3 text-xs">
                     {/* 0. Keputusan Sistem Otomatis (Bahan, Format, Metode, Layout, Kebutuhan, Biaya) */}
-                    <div className="rounded-xl border border-[#D4AF37]/35 bg-[#122D22]/80 p-4 space-y-2">
-                      <h3 className="font-bold text-[#E5C158] text-sm border-b border-[#D4AF37]/20 pb-2">
+                    <div className="rounded-lg border border-[#D4AF37]/35 bg-[#122D22]/80 p-3 space-y-1.5">
+                      <h3 className="font-bold text-[#E5C158] text-xs border-b border-[#D4AF37]/20 pb-1.5">
                         Keputusan Sistem Otomatis (Kombinasi Termurah):
                       </h3>
-                      <div className="grid grid-cols-1 gap-1.5 font-mono-tabular text-xs leading-relaxed text-[#F4F1EA]">
+                      <div className="grid grid-cols-1 gap-1 font-mono-tabular text-[11px] leading-relaxed text-[#F4F1EA]">
                         <div>
                           <span className="text-[#94A89B]">Bahan:</span>{' '}
                           <span className="font-semibold text-[#E5C158]">
@@ -2416,48 +2453,48 @@ export default function App() {
                     </div>
 
                     {/* 1. Material & Ukuran Potong Bersih */}
-                    <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-4 space-y-4">
-                      <h3 className="font-bold text-[#E5C158] text-sm border-b border-[#D4AF37]/15 pb-2">
+                    <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-3 space-y-2.5">
+                      <h3 className="font-bold text-[#E5C158] text-xs border-b border-[#D4AF37]/15 pb-1.5">
                         Material &amp; Ukuran Potong Bersih:
                       </h3>
 
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-[#F3D77D]">Karton / Board</div>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-[11px] text-[#F3D77D]">Karton / Board</div>
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.boardBodyLine}
                         </p>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.boardTutupLine}
                         </p>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-[#F3D77D]">Lapisan Dalam</div>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-[11px] text-[#F3D77D]">Lapisan Dalam</div>
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.lapisanDalamBodyLine}
                         </p>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.lapisanDalamTutupLine}
                         </p>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <div className="font-semibold text-[#F3D77D]">Lapisan Luar</div>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-[11px] text-[#F3D77D]">Lapisan Luar</div>
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.lapisanLuarBodyLine}
                         </p>
-                        <p className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]">
+                        <p className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]">
                           {calcResult.lapisanLuarTutupLine}
                         </p>
                       </div>
 
                       {calcResult.innerboxLines.length > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="font-semibold text-[#F3D77D]">Innerbox</div>
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-[11px] text-[#F3D77D]">Innerbox</div>
                           {calcResult.innerboxLines.map((line, idx) => (
                             <p
                               key={idx}
-                              className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]"
+                              className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]"
                             >
                               {line}
                             </p>
@@ -2466,12 +2503,12 @@ export default function App() {
                       )}
 
                       {calcResult.logoLines.length > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="font-semibold text-[#F3D77D]">Logo</div>
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-[11px] text-[#F3D77D]">Logo</div>
                           {calcResult.logoLines.map((line, idx) => (
                             <p
                               key={idx}
-                              className="font-mono-tabular text-xs leading-relaxed text-[#E2ECE6]"
+                              className="font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6]"
                             >
                               {line}
                             </p>
@@ -2481,12 +2518,12 @@ export default function App() {
                     </div>
 
                     {/* 2. Estimasi Rincian Biaya */}
-                    <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-4 space-y-3">
-                      <h3 className="font-bold text-[#E5C158] text-sm border-b border-[#D4AF37]/15 pb-2">
+                    <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-3 space-y-2">
+                      <h3 className="font-bold text-[#E5C158] text-xs border-b border-[#D4AF37]/15 pb-1.5">
                         Estimasi Rincian Biaya:
                       </h3>
 
-                      <ul className="space-y-2 font-mono-tabular text-xs leading-relaxed text-[#F4F1EA]">
+                      <ul className="space-y-1 font-mono-tabular text-[11px] leading-relaxed text-[#F4F1EA]">
                         <li>
                           - <span className="font-semibold text-[#E5C158]">{formatRupiah(calcResult.boardCost)}</span> : {calcResult.boardLabel}
                         </li>
@@ -2542,67 +2579,141 @@ export default function App() {
                         ))}
                       </ul>
 
-                      <div className="pt-3 border-t border-[#D4AF37]/20 flex items-center justify-between font-mono-tabular text-sm font-bold text-[#E5C158]">
+                      <div className="pt-2 border-t border-[#D4AF37]/20 flex items-center justify-between font-mono-tabular text-xs font-bold text-[#E5C158]">
                         <span>Total Biaya Produksi:</span>
                         <span>{formatRupiah(calcResult.totalBiayaProduksi)}</span>
                       </div>
                     </div>
 
-                    {/* 3. Perbandingan Biaya Cetak */}
-                    <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-4 space-y-3">
-                      <h3 className="font-bold text-[#E5C158] text-sm border-b border-[#D4AF37]/15 pb-2">
-                        Perbandingan Biaya Cetak {calcResult.outerPaperName}{' '}
-                        {calcResult.isLaminasiActive
-                          ? '(Termasuk Kertas, Cetak & Laminasi):'
-                          : '(Termasuk Kertas & Cetak):'}
-                      </h3>
+                    {/* 3. Perbandingan Biaya Cetak (Interaktif: User bisa memilih mesin) */}
+                    <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-3 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-[#D4AF37]/15 pb-1.5">
+                        <div>
+                          <h3 className="font-bold text-[#E5C158] text-xs">
+                            Perbandingan Biaya Cetak {calcResult.outerPaperName}{' '}
+                            {calcResult.isLaminasiActive
+                              ? '(Termasuk Kertas, Cetak & Laminasi):'
+                              : '(Termasuk Kertas & Cetak):'}
+                          </h3>
+                          <p className="text-[10px] text-[#A9BEB2]">
+                            Klik salah satu mesin di bawah untuk memilih opsi cetak. Total HPP & harga jual otomatis disesuaikan.
+                          </p>
+                        </div>
+                        {calcResult.selectedPrintIndex !== calcResult.minPrintIndex && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectPrintOption(undefined)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/40 rounded-md transition-all cursor-pointer shadow-xs"
+                            title="Kembali ke rekomendasi mesin termurah oleh sistem"
+                          >
+                            <span>↺ Reset ke Opsi Termurah</span>
+                          </button>
+                        )}
+                      </div>
 
-                      <ul className="space-y-2 font-mono-tabular text-xs leading-relaxed text-[#F4F1EA]">
-                        {calcResult.printComparisons.map((opt, idx) => (
-                          <li key={idx}>
-                            - <span className="font-semibold text-[#E5C158]">{formatRupiah(opt.totalCost)}</span> : {opt.label} {opt.detail}{' '}
-                            {opt.isRecommended && (
-                              <span className="font-sans font-semibold text-emerald-400">
-                                (✅ Rekomendasi Terpilih)
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="space-y-1.5">
+                        {calcResult.printComparisons.map((opt, idx) => {
+                          const isSelected = calcResult.selectedPrintIndex === idx;
+                          const isLowest = idx === calcResult.minPrintIndex;
+
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => handleSelectPrintOption(idx)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  handleSelectPrintOption(idx);
+                                }
+                              }}
+                              className={`group relative rounded-lg p-2 border transition-all cursor-pointer select-none text-left ${
+                                isSelected
+                                  ? 'bg-[#153427] border-[#D4AF37] ring-1 ring-[#D4AF37]/40 shadow-xs'
+                                  : 'bg-[#0B1D15]/80 hover:bg-[#10281E] border-[#D4AF37]/20 hover:border-[#D4AF37]/50'
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-1.5">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border text-[9px] ${
+                                        isSelected
+                                          ? 'border-[#D4AF37] bg-[#D4AF37] text-[#07140F] font-bold'
+                                          : 'border-[#94A89B]/50 text-transparent'
+                                      }`}
+                                    >
+                                      ✓
+                                    </span>
+                                    <span className="font-semibold text-xs text-[#F4F1EA]">
+                                      {opt.label}
+                                    </span>
+                                    <span className="text-[10px] text-[#A9BEB2]">
+                                      {opt.detail}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-[#94A89B] pl-5">
+                                    {opt.formatUkuran}
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <div className="font-mono-tabular text-xs sm:text-sm font-bold text-[#E5C158]">
+                                    {formatRupiah(opt.totalCost)}
+                                  </div>
+                                  <div className="flex flex-wrap items-center justify-end gap-1 pt-0.5">
+                                    {isLowest && (
+                                      <span className="inline-flex items-center gap-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 px-1.5 py-0.2 text-[9px] font-semibold text-emerald-400">
+                                        ⭐ Rekomendasi
+                                      </span>
+                                    )}
+                                    {isSelected && (
+                                      <span className="inline-flex items-center gap-0.5 rounded bg-[#D4AF37]/20 border border-[#D4AF37]/50 px-1.5 py-0.2 text-[9px] font-semibold text-[#F3D77D]">
+                                        ✓ Aktif
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* 4. Modal Box & Estimasi Harga Jual (Logika Harga) */}
-                    <div className="rounded-xl border border-[#D4AF37]/40 bg-[#122D22] p-4 space-y-3">
-                      <div className="space-y-1">
-                        <h3 className="font-bold text-[#E5C158] text-sm">Modal Box</h3>
-                        <p className="text-xs text-[#B8C7BE]">
+                    <div className="rounded-lg border border-[#D4AF37]/40 bg-[#122D22] p-3 space-y-2">
+                      <div className="space-y-0.5">
+                        <h3 className="font-bold text-[#E5C158] text-xs">Modal Box</h3>
+                        <p className="text-[11px] text-[#B8C7BE]">
                           Harga Modal = Total modal dibagi qty ({formatRupiah(calcResult.totalBiayaProduksi)} ÷ {calcResult.qty} pcs)
                         </p>
-                        <div className="pt-1 font-mono-tabular text-lg sm:text-xl font-bold text-[#F3D77D]">
+                        <div className="pt-0.5 font-mono-tabular text-base sm:text-lg font-bold text-[#F3D77D]">
                           {formatRupiah(calcResult.hargaModalPerPcs)}{' '}
-                          <span className="text-xs font-normal text-[#94A89B]">/ pcs</span>
+                          <span className="text-[11px] font-normal text-[#94A89B]">/ pcs</span>
                         </div>
                       </div>
 
-                      <div className="border-t border-[#D4AF37]/25 pt-3 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
+                      <div className="border-t border-[#D4AF37]/25 pt-2 space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
                           <span className="font-semibold text-[#E5C158]">
                             Harga Jual (Logika Margin):
                           </span>
-                          <span className="rounded-md border border-[#D4AF37]/30 bg-[#081610] px-2 py-0.5 font-mono-tabular text-[11px] text-[#F3D77D]">
+                          <span className="rounded border border-[#D4AF37]/30 bg-[#081610] px-1.5 py-0.2 font-mono-tabular text-[10px] text-[#F3D77D]">
                             {calcResult.marginTierLabel}
                           </span>
                         </div>
-                        <p className="font-mono-tabular text-xs text-[#B8C7BE]">
+                        <p className="font-mono-tabular text-[11px] text-[#B8C7BE]">
                           Margin <strong className="text-[#F4F1EA]">{calcResult.marginPercent}%</strong> ➔ Pengali{' '}
                           <strong className="text-[#E5C158]">{calcResult.pengaliHargaJual.toFixed(2)}</strong> ({formatRupiah(calcResult.hargaModalPerPcs)} x {calcResult.pengaliHargaJual.toFixed(2)})
                         </p>
                         <div className="pt-0.5 flex items-baseline justify-between">
-                          <div className="font-mono-tabular text-lg sm:text-xl font-bold text-emerald-400">
+                          <div className="font-mono-tabular text-base sm:text-lg font-bold text-emerald-400">
                             {formatRupiah(calcResult.hargaJualPerPcs)}{' '}
-                            <span className="text-xs font-normal text-[#94A89B]">/ pcs</span>
+                            <span className="text-[11px] font-normal text-[#94A89B]">/ pcs</span>
                           </div>
-                          <div className="font-mono-tabular text-xs text-[#94A89B]">
+                          <div className="font-mono-tabular text-[11px] text-[#94A89B]">
                             Total Jual: <strong className="text-[#F4F1EA]">{formatRupiah(calcResult.totalHargaJual)}</strong>
                           </div>
                         </div>
@@ -2614,9 +2725,9 @@ export default function App() {
             </div>
           ) : activeMenu === 'data-bahan' ? (
             /* Data Bahan View with Bahan Dasar, Kertas Std, and Kertas Premium Tabs */
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Top Tab Selector: Bahan Dasar, Kertas Std, Kertas Premium */}
-              <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-[#D4AF37]/25 bg-[#0B1D15] p-2 shadow-lg">
+              <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#D4AF37]/25 bg-[#0B1D15] p-1.5 shadow-md">
                 {MATERIAL_TABS.map((tab) => {
                   const TabIcon = tab.icon;
                   const isTabActive = activeMaterialTab === tab.id;
@@ -2627,14 +2738,14 @@ export default function App() {
                         setActiveMaterialTab(tab.id);
                         setDeleteMaterialConfirmId(null);
                       }}
-                      className={`flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                         isTabActive
-                          ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                          ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                           : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
                       }`}
                     >
                       <TabIcon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-3.5 w-3.5 shrink-0 ${
                           isTabActive ? 'text-[#07140F]' : 'text-[#D4AF37]'
                         }`}
                       />
@@ -2665,66 +2776,66 @@ export default function App() {
                     : 'Database harga dan ukuran bahan pelapis / isian dalam box (Busa Ati, Eva Foam, Bludru, Satin, dll)';
 
                 return (
-                  <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2.5">
-                          <TabIcon className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                          <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+                  <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <TabIcon className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                          <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                             Tabel Data Bahan — {currentMaterialTabObj.label}
                           </h1>
                         </div>
-                        <p className="text-xs sm:text-sm text-[#8FA599]">
+                        <p className="text-[11px] sm:text-xs text-[#8FA599]">
                           {subtitleText}
                         </p>
                       </div>
 
                       <button
                         onClick={openAddMaterialModal}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                        className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                       >
-                        <Plus className="h-4 w-4 stroke-[2.5]" />
+                        <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                         <span>Tambah {currentMaterialTabObj.label}</span>
                       </button>
                     </div>
 
-                    <div className="mt-6 overflow-x-auto">
+                    <div className="mt-4 overflow-x-auto">
                       <table className="w-full border-collapse text-left">
                         <thead>
-                          <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                            <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[38%]">
+                          <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                            <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[38%]">
                               Nama {currentMaterialTabObj.label}
                             </th>
-                            <th className="py-3.5 px-4 text-center w-[26%]">
+                            <th className="py-2.5 px-3 text-center w-[26%]">
                               Ukuran
                             </th>
-                            <th className="py-3.5 px-4 text-center w-[24%]">
+                            <th className="py-2.5 px-3 text-center w-[24%]">
                               Harga
                             </th>
-                            <th className="py-3.5 pl-4 pr-4 text-right rounded-tr-lg w-[12%]">
+                            <th className="py-2.5 pl-3 pr-3 text-right rounded-tr-lg w-[12%]">
                               Aksi
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                        <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                           {currentList.length === 0 ? (
                             <tr>
                               <td colSpan={4} className="p-0">
-                                <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">
-                                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                    <Construction className="h-7 w-7" />
+                                <div className="flex min-h-[220px] flex-col items-center justify-center px-4 py-8 text-center">
+                                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                    <Construction className="h-5 w-5" />
                                   </div>
-                                  <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                                  <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                                     MAINTENANCE
                                   </h2>
-                                  <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
+                                  <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
                                     Halaman Tabel{' '}
                                     <span className="text-[#E5C158]">
                                       {currentMaterialTabObj.label}
                                     </span>{' '}
                                     sedang dalam proses maintenance
                                   </p>
-                                  <p className="mt-1 max-w-md text-xs sm:text-sm text-[#8FA599] leading-relaxed">
+                                  <p className="mt-0.5 max-w-md text-[11px] text-[#8FA599] leading-relaxed">
                                     Data {currentMaterialTabObj.label.toLowerCase()} saat ini masih dikosongkan sementara. Anda juga dapat menekan tombol{' '}
                                     <strong>+ Tambah {currentMaterialTabObj.label}</strong> di kanan atas.
                                   </p>
@@ -2737,57 +2848,57 @@ export default function App() {
                                 key={item.id}
                                 className="group hover:bg-[#10291E]/70 transition-colors"
                               >
-                                <td className="py-4 pl-4 pr-4 align-middle">
+                                <td className="py-2.5 pl-3 pr-3 align-middle">
                                   <button
                                     onClick={() => openEditMaterialModal(item)}
-                                    className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                                    className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                                   >
                                     {item.namaBahan}
                                   </button>
                                 </td>
 
-                                <td className="py-3 px-4 align-middle">
+                                <td className="py-2 px-3 align-middle">
                                   <div
                                     onClick={() => openEditMaterialModal(item)}
-                                    className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                    className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                   >
                                     {item.ukuranPlano}
                                   </div>
                                 </td>
 
-                                <td className="py-3 px-4 align-middle">
+                                <td className="py-2 px-3 align-middle">
                                   <div
                                     onClick={() => openEditMaterialModal(item)}
-                                    className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                    className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                   >
                                     {item.hargaLembar}
                                   </div>
                                 </td>
 
-                                <td className="py-4 pl-4 pr-4 align-middle text-right">
-                                  <div className="flex items-center justify-end gap-2">
+                                <td className="py-2.5 pl-3 pr-3 align-middle text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
                                     <button
                                       onClick={() => openEditMaterialModal(item)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                       title={`Ubah ${item.namaBahan}`}
                                     >
-                                      <Pencil className="h-3.5 w-3.5" />
+                                      <Pencil className="h-3 w-3" />
                                     </button>
 
                                     {deleteMaterialConfirmId === item.id ? (
                                       <button
                                         onClick={() => handleDeleteMaterialItem(item.id)}
-                                        className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                        className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                       >
                                         Hapus?
                                       </button>
                                     ) : (
                                       <button
                                         onClick={() => setDeleteMaterialConfirmId(item.id)}
-                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                         title={`Hapus ${item.namaBahan}`}
                                       >
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <Trash2 className="h-3 w-3" />
                                       </button>
                                     )}
                                   </div>
@@ -2804,9 +2915,9 @@ export default function App() {
             </div>
           ) : activeMenu === 'data-proses' ? (
             /* Data Proses View with Digital, Offset, Laminasi, and Logo Tabs */
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Top Tab Selector: Digital, Offset, Laminasi, Logo */}
-              <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-[#D4AF37]/25 bg-[#0B1D15] p-2 shadow-lg">
+              <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#D4AF37]/25 bg-[#0B1D15] p-1.5 shadow-md">
                 {PROCESS_TABS.map((tab) => {
                   const TabIcon = tab.icon;
                   const isTabActive = activeProcessTab === tab.id;
@@ -2817,14 +2928,14 @@ export default function App() {
                         setActiveProcessTab(tab.id);
                         setDeleteProcessConfirmId(null);
                       }}
-                      className={`flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                         isTabActive
-                          ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                          ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                           : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
                       }`}
                     >
                       <TabIcon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-3.5 w-3.5 shrink-0 ${
                           isTabActive ? 'text-[#07140F]' : 'text-[#D4AF37]'
                         }`}
                       />
@@ -2836,60 +2947,60 @@ export default function App() {
 
               {/* 1. TAB DIGITAL */}
               {activeProcessTab === 'digital' && (
-                <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5">
-                        <Printer className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                        <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+                <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Printer className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                        <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                           Tabel Data Proses — Digital
                         </h1>
                       </div>
-                      <p className="text-xs sm:text-sm text-[#8FA599]">
+                      <p className="text-[11px] sm:text-xs text-[#8FA599]">
                         Database spesifikasi mesin, ukuran kertas, dan tarif proses cetak digital
                       </p>
                     </div>
 
                     <button
                       onClick={openAddProcessModal}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                     >
-                      <Plus className="h-4 w-4 stroke-[2.5]" />
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Tambah Digital</span>
                     </button>
                   </div>
 
-                  <div className="mt-6 overflow-x-auto">
+                  <div className="mt-4 overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
-                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                          <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[26%]">
+                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                          <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[26%]">
                             Nama Mesin / Layanan Digital
                           </th>
-                          <th className="py-3.5 px-4 text-center w-[20%]">
+                          <th className="py-2.5 px-3 text-center w-[20%]">
                             Area Cetak Maksimal
                           </th>
-                          <th className="py-3.5 px-4 text-center w-[24%]">
+                          <th className="py-2.5 px-3 text-center w-[24%]">
                             Harga Cetak
                           </th>
-                          <th className="py-3.5 px-4 w-[20%]">Keterangan</th>
-                          <th className="py-3.5 pl-4 pr-4 text-right rounded-tr-lg w-[10%]">
+                          <th className="py-2.5 px-3 w-[20%]">Keterangan</th>
+                          <th className="py-2.5 pl-3 pr-3 text-right rounded-tr-lg w-[10%]">
                             Aksi
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                      <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                         {digitalItems.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="p-0">
-                              <div className="flex min-h-[280px] flex-col items-center justify-center px-6 py-12 text-center">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                  <Construction className="h-7 w-7" />
+                              <div className="flex min-h-[200px] flex-col items-center justify-center px-4 py-8 text-center">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                  <Construction className="h-5 w-5" />
                                 </div>
-                                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                                <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                                   MAINTENANCE
                                 </h2>
-                                <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
+                                <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
                                   Belum ada data cetak digital
                                 </p>
                               </div>
@@ -2901,62 +3012,62 @@ export default function App() {
                               key={item.id}
                               className="group hover:bg-[#10291E]/70 transition-colors"
                             >
-                              <td className="py-4 pl-4 pr-4 align-middle">
+                              <td className="py-2.5 pl-3 pr-3 align-middle">
                                 <button
                                   onClick={() => openEditDigitalModal(item)}
-                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                                   title="Klik untuk ubah data"
                                 >
                                   {item.namaMesin}
                                 </button>
                               </td>
 
-                              <td className="py-3 px-4 align-middle">
+                              <td className="py-2 px-3 align-middle">
                                 <div
                                   onClick={() => openEditDigitalModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.ukuranArea}
                                 </div>
                               </td>
 
-                              <td className="py-3 px-4 align-middle">
+                              <td className="py-2 px-3 align-middle">
                                 <div
                                   onClick={() => openEditDigitalModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.hargaCetak}
                                 </div>
                               </td>
 
-                              <td className="py-4 px-4 align-middle text-xs sm:text-sm leading-relaxed text-[#A7BBB0]">
+                              <td className="py-2 px-3 align-middle text-[11px] sm:text-xs leading-relaxed text-[#A7BBB0]">
                                 {item.keterangan}
                               </td>
 
-                              <td className="py-4 pl-4 pr-4 align-middle text-right">
-                                <div className="flex items-center justify-end gap-2">
+                              <td className="py-2.5 pl-3 pr-3 align-middle text-right">
+                                <div className="flex items-center justify-end gap-1.5">
                                   <button
                                     onClick={() => openEditDigitalModal(item)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                     title={`Ubah ${item.namaMesin}`}
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <Pencil className="h-3 w-3" />
                                   </button>
 
                                   {deleteProcessConfirmId === item.id ? (
                                     <button
                                       onClick={() => handleDeleteProcessItem(item.id)}
-                                      className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                      className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                     >
                                       Hapus?
                                     </button>
                                   ) : (
                                     <button
                                       onClick={() => setDeleteProcessConfirmId(item.id)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                       title={`Hapus ${item.namaMesin}`}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3 w-3" />
                                     </button>
                                   )}
                                 </div>
@@ -2972,65 +3083,65 @@ export default function App() {
 
               {/* 2. TAB OFFSET (Revised Columns: Mesin Cetak, Ukuran Area Cetak, Biaya Cetak, Lebih Druk) */}
               {activeProcessTab === 'offset' && (
-                <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5">
-                        <Layers className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                        <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+                <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Layers className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                        <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                           Tabel Data Proses — Offset
                         </h1>
                       </div>
-                      <p className="text-xs sm:text-sm text-[#8FA599]">
+                      <p className="text-[11px] sm:text-xs text-[#8FA599]">
                         Database spesifikasi mesin cetak offset, ukuran area cetak, biaya cetak, dan lebih druk
                       </p>
                     </div>
 
                     <button
                       onClick={openAddProcessModal}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                     >
-                      <Plus className="h-4 w-4 stroke-[2.5]" />
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Tambah Offset</span>
                     </button>
                   </div>
 
-                  <div className="mt-6 overflow-x-auto">
+                  <div className="mt-4 overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
-                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                          <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[18%]">
+                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                          <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[18%]">
                             Mesin Cetak
                           </th>
-                          <th className="py-3.5 px-4 text-center w-[16%]">
+                          <th className="py-2.5 px-3 text-center w-[16%]">
                             Ukuran Area Cetak
                           </th>
-                          <th className="py-3.5 px-4 text-center w-[20%]">
+                          <th className="py-2.5 px-3 text-center w-[20%]">
                             Biaya Cetak
                           </th>
-                          <th className="py-3.5 px-4 w-[36%]">
+                          <th className="py-2.5 px-3 w-[36%]">
                             Lebih Druk
                           </th>
-                          <th className="py-3.5 pl-4 pr-4 text-right rounded-tr-lg w-[10%]">
+                          <th className="py-2.5 pl-3 pr-3 text-right rounded-tr-lg w-[10%]">
                             Aksi
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                      <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                         {offsetItems.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="p-0">
-                              <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                  <Construction className="h-7 w-7" />
+                              <div className="flex min-h-[200px] flex-col items-center justify-center px-4 py-8 text-center">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                  <Construction className="h-5 w-5" />
                                 </div>
-                                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                                <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                                   MAINTENANCE
                                 </h2>
-                                <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
+                                <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
                                   Halaman Tabel <span className="text-[#E5C158]">Offset</span> sedang dalam proses maintenance
                                 </p>
-                                <p className="mt-1 max-w-md text-xs sm:text-sm text-[#8FA599] leading-relaxed">
+                                <p className="mt-0.5 max-w-md text-[11px] text-[#8FA599] leading-relaxed">
                                   Data proses cetak offset saat ini masih dikosongkan sementara. Anda juga dapat menekan tombol <strong>+ Tambah Offset</strong> di kanan atas.
                                 </p>
                               </div>
@@ -3042,66 +3153,66 @@ export default function App() {
                               key={item.id}
                               className="group hover:bg-[#10291E]/70 transition-colors"
                             >
-                              <td className="py-4 pl-4 pr-4 align-middle">
+                              <td className="py-2.5 pl-3 pr-3 align-middle">
                                 <button
                                   onClick={() => openEditOffsetModal(item)}
-                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                                 >
                                   {item.mesinCetak}
                                 </button>
                               </td>
 
-                              <td className="py-3 px-4 align-middle">
+                              <td className="py-2 px-3 align-middle">
                                 <div
                                   onClick={() => openEditOffsetModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.ukuranAreaCetak}
                                 </div>
                               </td>
 
-                              <td className="py-3 px-4 align-middle">
+                              <td className="py-2 px-3 align-middle">
                                 <div
                                   onClick={() => openEditOffsetModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.biayaCetak}
                                 </div>
                               </td>
 
-                              <td className="py-3 px-4 align-middle">
+                              <td className="py-2 px-3 align-middle">
                                 <div
                                   onClick={() => openEditOffsetModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                                 >
                                   {item.lebihDruk}
                                 </div>
                               </td>
 
-                              <td className="py-4 pl-4 pr-4 align-middle text-right">
-                                <div className="flex items-center justify-end gap-2">
+                              <td className="py-2.5 pl-3 pr-3 align-middle text-right">
+                                <div className="flex items-center justify-end gap-1.5">
                                   <button
                                     onClick={() => openEditOffsetModal(item)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                     title={`Ubah ${item.mesinCetak}`}
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <Pencil className="h-3 w-3" />
                                   </button>
 
                                   {deleteProcessConfirmId === item.id ? (
                                     <button
                                       onClick={() => handleDeleteProcessItem(item.id)}
-                                      className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                      className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                     >
                                       Hapus?
                                     </button>
                                   ) : (
                                     <button
                                       onClick={() => setDeleteProcessConfirmId(item.id)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                       title={`Hapus ${item.mesinCetak}`}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3 w-3" />
                                     </button>
                                   )}
                                 </div>
@@ -3117,68 +3228,68 @@ export default function App() {
 
               {/* 3. TAB LAMINASI */}
               {activeProcessTab === 'laminasi' && (
-                <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5">
-                        <ShieldCheck className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                        <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+                <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                        <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                           Tabel Data Proses — Laminasi
                         </h1>
                       </div>
-                      <p className="text-xs sm:text-sm text-[#8FA599]">
+                      <p className="text-[11px] sm:text-xs text-[#8FA599]">
                         Database jenis laminasi, tipe (Digital / Offset), max ukuran, harga, biaya minimum, dan rumus minimum
                       </p>
                     </div>
 
                     <button
                       onClick={openAddProcessModal}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                     >
-                      <Plus className="h-4 w-4 stroke-[2.5]" />
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Tambah Laminasi</span>
                     </button>
                   </div>
 
-                  <div className="mt-6 overflow-x-auto">
+                  <div className="mt-4 overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
-                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                          <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[18%]">
+                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                          <th className="py-2.5 pl-3 pr-2.5 rounded-tl-lg w-[18%]">
                             Jenis Laminasi
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[12%]">
+                          <th className="py-2.5 px-2.5 text-center w-[12%]">
                             Type
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[14%]">
+                          <th className="py-2.5 px-2.5 text-center w-[14%]">
                             Max Ukuran
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[14%]">
+                          <th className="py-2.5 px-2.5 text-center w-[14%]">
                             Harga
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[16%]">
+                          <th className="py-2.5 px-2.5 text-center w-[16%]">
                             Biaya Minumum
                           </th>
-                          <th className="py-3.5 px-3 w-[18%]">
+                          <th className="py-2.5 px-2.5 w-[18%]">
                             Rumus Minimum
                           </th>
-                          <th className="py-3.5 pl-3 pr-4 text-right rounded-tr-lg w-[8%]">
+                          <th className="py-2.5 pl-2.5 pr-3 text-right rounded-tr-lg w-[8%]">
                             Aksi
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                      <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                         {laminasiItems.length === 0 ? (
                           <tr>
                             <td colSpan={7} className="p-0">
-                              <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                  <Construction className="h-7 w-7" />
+                              <div className="flex min-h-[200px] flex-col items-center justify-center px-4 py-8 text-center">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                  <Construction className="h-5 w-5" />
                                 </div>
-                                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                                <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                                   MAINTENANCE
                                 </h2>
-                                <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
+                                <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
                                   Belum ada data laminasi
                                 </p>
                               </div>
@@ -3191,90 +3302,90 @@ export default function App() {
                               className="group hover:bg-[#10291E]/70 transition-colors"
                             >
                               {/* Jenis Laminasi */}
-                              <td className="py-4 pl-4 pr-3 align-middle">
+                              <td className="py-2.5 pl-3 pr-2.5 align-middle">
                                 <button
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                                 >
                                   {item.jenisLaminasi}
                                 </button>
                               </td>
 
                               {/* Type (Digital / Offset) */}
-                              <td className="py-3 px-3 align-middle text-center">
+                              <td className="py-2 px-2.5 align-middle text-center">
                                 <button
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="w-full rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center text-xs font-semibold text-[#F3D77D] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="w-full rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2 py-1 text-center text-xs font-semibold text-[#F3D77D] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.type}
                                 </button>
                               </td>
 
                               {/* Max Ukuran */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.maxUkuran}
                                 </div>
                               </td>
 
                               {/* Harga */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.harga}
                                 </div>
                               </td>
 
                               {/* Biaya Minimum */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.biayaMinimum}
                                 </div>
                               </td>
 
                               {/* Rumus Minimum */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLaminasiModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                                 >
                                   {item.rumusMinimum}
                                 </div>
                               </td>
 
                               {/* Aksi */}
-                              <td className="py-4 pl-3 pr-4 align-middle text-right">
-                                <div className="flex items-center justify-end gap-2">
+                              <td className="py-2.5 pl-2.5 pr-3 align-middle text-right">
+                                <div className="flex items-center justify-end gap-1.5">
                                   <button
                                     onClick={() => openEditLaminasiModal(item)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                     title={`Ubah ${item.jenisLaminasi}`}
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <Pencil className="h-3 w-3" />
                                   </button>
 
                                   {deleteProcessConfirmId === item.id ? (
                                     <button
                                       onClick={() => handleDeleteProcessItem(item.id)}
-                                      className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                      className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                     >
                                       Hapus?
                                     </button>
                                   ) : (
                                     <button
                                       onClick={() => setDeleteProcessConfirmId(item.id)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                       title={`Hapus ${item.jenisLaminasi}`}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3 w-3" />
                                     </button>
                                   )}
                                 </div>
@@ -3290,68 +3401,68 @@ export default function App() {
 
               {/* 4. TAB LOGO */}
               {activeProcessTab === 'logo' && (
-                <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5">
-                        <Award className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                        <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+                <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Award className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                        <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                           Tabel Data Proses — Logo
                         </h1>
                       </div>
-                      <p className="text-xs sm:text-sm text-[#8FA599]">
+                      <p className="text-[11px] sm:text-xs text-[#8FA599]">
                         Database proses finishing logo (Hotprint / Poly Foil, Emboss, Deboss, Spot UV) dan biaya klise
                       </p>
                     </div>
 
                     <button
                       onClick={openAddProcessModal}
-                      className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                      className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                     >
-                      <Plus className="h-4 w-4 stroke-[2.5]" />
+                      <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                       <span>Tambah Logo</span>
                     </button>
                   </div>
 
-                  <div className="mt-6 overflow-x-auto">
+                  <div className="mt-4 overflow-x-auto">
                     <table className="w-full border-collapse text-left">
                       <thead>
-                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                          <th className="py-3.5 pl-4 pr-3 rounded-tl-lg w-[16%]">
+                        <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                          <th className="py-2.5 pl-3 pr-2.5 rounded-tl-lg w-[16%]">
                             Jenis Logo
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[14%]">
+                          <th className="py-2.5 px-2.5 text-center w-[14%]">
                             Harga
                           </th>
-                          <th className="py-3.5 px-3 text-center w-[15%]">
+                          <th className="py-2.5 px-2.5 text-center w-[15%]">
                             Biaya Min
                           </th>
-                          <th className="py-3.5 px-3 w-[22%]">
+                          <th className="py-2.5 px-2.5 w-[22%]">
                             Rumus Logo
                           </th>
-                          <th className="py-3.5 px-3 w-[25%]">
+                          <th className="py-2.5 px-2.5 w-[25%]">
                             Keterangan
                           </th>
-                          <th className="py-3.5 pl-3 pr-4 text-right rounded-tr-lg w-[8%]">
+                          <th className="py-2.5 pl-2.5 pr-3 text-right rounded-tr-lg w-[8%]">
                             Aksi
                           </th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                      <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                         {logoItems.length === 0 ? (
                           <tr>
                             <td colSpan={6} className="p-0">
-                              <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">
-                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                  <Construction className="h-7 w-7" />
+                              <div className="flex min-h-[200px] flex-col items-center justify-center px-4 py-8 text-center">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                  <Construction className="h-5 w-5" />
                                 </div>
-                                <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
+                                <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
                                   MAINTENANCE
                                 </h2>
-                                <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
+                                <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
                                   Halaman Tabel <span className="text-[#E5C158]">Logo</span> sedang dalam proses maintenance
                                 </p>
-                                <p className="mt-1 max-w-md text-xs sm:text-sm text-[#8FA599] leading-relaxed">
+                                <p className="mt-0.5 max-w-md text-[11px] text-[#8FA599] leading-relaxed">
                                   Data proses logo saat ini masih dikosongkan sementara. Anda juga dapat menekan tombol <strong>+ Tambah Logo</strong> di kanan atas.
                                 </p>
                               </div>
@@ -3364,75 +3475,75 @@ export default function App() {
                               className="group hover:bg-[#10291E]/70 transition-colors"
                             >
                               {/* Jenis Logo */}
-                              <td className="py-4 pl-4 pr-3 align-middle">
+                              <td className="py-2.5 pl-3 pr-2.5 align-middle">
                                 <button
                                   onClick={() => openEditLogoModal(item)}
-                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                                  className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                                 >
                                   {item.jenisLogo}
                                 </button>
                               </td>
 
                               {/* Harga */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLogoModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.harga}
                                 </div>
                               </td>
 
                               {/* Biaya Min */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLogoModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                                 >
                                   {item.biayaMin}
                                 </div>
                               </td>
 
                               {/* Rumus Logo */}
-                              <td className="py-3 px-3 align-middle">
+                              <td className="py-2 px-2.5 align-middle">
                                 <div
                                   onClick={() => openEditLogoModal(item)}
-                                  className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3 py-2.5 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                                  className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1 text-left font-mono-tabular text-xs leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                                 >
                                   {item.rumusLogo}
                                 </div>
                               </td>
 
                               {/* Keterangan */}
-                              <td className="py-4 px-3 align-middle text-xs sm:text-sm leading-relaxed text-[#A7BBB0]">
+                              <td className="py-2 px-2.5 align-middle text-[11px] sm:text-xs leading-relaxed text-[#A7BBB0]">
                                 {item.keterangan}
                               </td>
 
                               {/* Aksi */}
-                              <td className="py-4 pl-3 pr-4 align-middle text-right">
-                                <div className="flex items-center justify-end gap-2">
+                              <td className="py-2.5 pl-2.5 pr-3 align-middle text-right">
+                                <div className="flex items-center justify-end gap-1.5">
                                   <button
                                     onClick={() => openEditLogoModal(item)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                     title={`Ubah ${item.jenisLogo}`}
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
+                                    <Pencil className="h-3 w-3" />
                                   </button>
 
                                   {deleteProcessConfirmId === item.id ? (
                                     <button
                                       onClick={() => handleDeleteProcessItem(item.id)}
-                                      className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                      className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                     >
                                       Hapus?
                                     </button>
                                   ) : (
                                     <button
                                       onClick={() => setDeleteProcessConfirmId(item.id)}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                       title={`Hapus ${item.jenisLogo}`}
                                     >
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <Trash2 className="h-3 w-3" />
                                     </button>
                                   )}
                                 </div>
@@ -3447,66 +3558,66 @@ export default function App() {
               )}
             </div>
           ) : activeMenu === 'biaya-finishing' ? (
-            <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
+            <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
               {/* Section Header */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2.5">
-                    <Wrench className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                    <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                    <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                       Database Biaya Finishing Jasa Rakit
                     </h1>
                   </div>
-                  <p className="text-xs sm:text-sm text-[#8FA599]">
+                  <p className="text-[11px] sm:text-xs text-[#8FA599]">
                     Ubah atau rancang range harga jasa rakit box manual
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <div className="relative flex-1 sm:flex-initial">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8FA599]" />
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8FA599]" />
                     <input
                       type="text"
                       value={finishingSearch}
                       onChange={(e) => setFinishingSearch(e.target.value)}
                       placeholder="Cari model box..."
-                      className="w-full sm:w-52 rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-9 pr-3 py-2 text-xs text-[#F4F1EA] placeholder-[#6E8478] focus:border-[#D4AF37] focus:outline-none"
+                      className="w-full sm:w-44 rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-8 pr-2.5 py-1.5 text-xs text-[#F4F1EA] placeholder-[#6E8478] focus:border-[#D4AF37] focus:outline-none"
                     />
                   </div>
 
                   <button
                     onClick={openAddFinishingModal}
-                    className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                   >
-                    <Plus className="h-4 w-4 stroke-[2.5]" />
+                    <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                     <span>Tambah Biaya Finishing</span>
                   </button>
                 </div>
               </div>
 
               {/* Reference Data Table */}
-              <div className="mt-6 overflow-x-auto">
+              <div className="mt-4 overflow-x-auto">
                 <table className="w-full border-collapse text-left">
                   <thead>
-                    <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                      <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[26%]">
+                    <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                      <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[26%]">
                         Model Box
                       </th>
-                      <th className="py-3.5 px-4 text-center w-[24%]">
+                      <th className="py-2.5 px-3 text-center w-[24%]">
                         Harga Jasa (Min - Max)
                       </th>
-                      <th className="py-3.5 px-4 w-[40%]">Instruksi Khusus</th>
-                      <th className="py-3.5 pl-4 pr-4 text-right rounded-tr-lg w-[10%]">
+                      <th className="py-2.5 px-3 w-[40%]">Instruksi Khusus</th>
+                      <th className="py-2.5 pl-3 pr-3 text-right rounded-tr-lg w-[10%]">
                         Aksi
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
+                  <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
                     {filteredFinishingItems.length === 0 ? (
                       <tr>
                         <td
                           colSpan={4}
-                          className="py-12 text-center text-sm text-[#8FA599]"
+                          className="py-8 text-center text-xs text-[#8FA599]"
                         >
                           Tidak ada data biaya finishing yang cocok dengan pencarian.
                         </td>
@@ -3517,20 +3628,20 @@ export default function App() {
                           key={item.id}
                           className="group hover:bg-[#10291E]/70 transition-colors"
                         >
-                          <td className="py-4 pl-4 pr-4 align-middle">
+                          <td className="py-2.5 pl-3 pr-3 align-middle">
                             <button
                               onClick={() => openEditFinishingModal(item)}
-                              className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer"
+                              className="text-left font-semibold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
                               title="Klik untuk ubah data"
                             >
                               {item.modelBox}
                             </button>
                           </td>
 
-                          <td className="py-3 px-4 align-middle">
+                          <td className="py-2 px-3 align-middle">
                             <button
                               onClick={() => openEditFinishingModal(item)}
-                              className="w-full rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-4 py-3 text-center font-mono-tabular text-xs sm:text-sm font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
+                              className="w-full rounded-md border border-[#D4AF37]/15 bg-[#081610] px-3 py-1.5 text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-nowrap"
                               title="Klik untuk ubah range harga"
                             >
                               {formatRupiah(item.minPrice)} -{' '}
@@ -3538,25 +3649,25 @@ export default function App() {
                             </button>
                           </td>
 
-                          <td className="py-4 px-4 align-middle text-xs sm:text-sm leading-relaxed text-[#A7BBB0]">
+                          <td className="py-2 px-3 align-middle text-[11px] sm:text-xs leading-relaxed text-[#A7BBB0]">
                             {item.specialInstructions}
                           </td>
 
-                          <td className="py-4 pl-4 pr-4 align-middle text-right">
-                            <div className="flex items-center justify-end gap-2">
+                          <td className="py-2.5 pl-3 pr-3 align-middle text-right">
+                            <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => openEditFinishingModal(item)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
                                 title={`Ubah ${item.modelBox}`}
                                 aria-label={`Ubah ${item.modelBox}`}
                               >
-                                <Pencil className="h-3.5 w-3.5" />
+                                <Pencil className="h-3 w-3" />
                               </button>
 
                               {deleteFinishingConfirmId === item.id ? (
                                 <button
                                   onClick={() => handleDeleteFinishing(item.id)}
-                                  className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                  className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                   title="Konfirmasi Hapus"
                                 >
                                   Hapus?
@@ -3564,11 +3675,11 @@ export default function App() {
                               ) : (
                                 <button
                                   onClick={() => setDeleteFinishingConfirmId(item.id)}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                   title={`Hapus ${item.modelBox}`}
                                   aria-label={`Hapus ${item.modelBox}`}
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-3 w-3" />
                                 </button>
                               )}
                             </div>
@@ -3582,68 +3693,68 @@ export default function App() {
             </section>
           ) : activeMenu === 'rumus-model' ? (
             /* Rumus Model View - Detailed Reference Table */
-            <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-7 shadow-xl">
+            <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
               {/* Section Header */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2.5">
-                    <BookOpen className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                    <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                    <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
                       Database Rumus Model Box
                     </h1>
                   </div>
-                  <p className="text-xs sm:text-sm text-[#8FA599]">
+                  <p className="text-[11px] sm:text-xs text-[#8FA599]">
                     Parameter perhitungan otomatis untuk Board, Lapisan Dalam, Lapisan Luar, dan Pisau Pond
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2.5">
                   <div className="relative flex-1 sm:flex-initial">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8FA599]" />
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8FA599]" />
                     <input
                       type="text"
                       value={formulaSearch}
                       onChange={(e) => setFormulaSearch(e.target.value)}
                       placeholder="Cari model atau rumus..."
-                      className="w-full sm:w-52 rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-9 pr-3 py-2 text-xs text-[#F4F1EA] placeholder-[#6E8478] focus:border-[#D4AF37] focus:outline-none"
+                      className="w-full sm:w-44 rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-8 pr-2.5 py-1.5 text-xs text-[#F4F1EA] placeholder-[#6E8478] focus:border-[#D4AF37] focus:outline-none"
                     />
                   </div>
 
                   <button
                     onClick={openAddFormulaModal}
-                    className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
                   >
-                    <Plus className="h-4 w-4 stroke-[2.5]" />
+                    <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
                     <span>Tambah Rumus Model</span>
                   </button>
                 </div>
               </div>
 
               {/* Detailed Formula Table matching reference image */}
-              <div className="mt-6 overflow-x-auto pb-2">
-                <table className="w-full min-w-[1420px] border-collapse text-left">
+              <div className="mt-4 overflow-x-auto pb-1">
+                <table className="w-full min-w-[1380px] border-collapse text-left">
                   <thead>
-                    <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                      <th className="py-3.5 pl-4 pr-3 rounded-tl-lg w-[13%]">
+                    <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                      <th className="py-2.5 pl-3 pr-2.5 rounded-tl-lg w-[13%]">
                         Model Box
                       </th>
-                      <th className="py-3.5 px-2.5 w-[10%]">Board Body</th>
-                      <th className="py-3.5 px-2.5 w-[12%]">Board Tutup</th>
-                      <th className="py-3.5 px-2.5 w-[10.5%]">
+                      <th className="py-2.5 px-2 w-[10%]">Board Body</th>
+                      <th className="py-2.5 px-2 w-[12%]">Board Tutup</th>
+                      <th className="py-2.5 px-2 w-[10.5%]">
                         Lapisan Dalam Body
                       </th>
-                      <th className="py-3.5 px-2.5 w-[10.5%]">
+                      <th className="py-2.5 px-2 w-[10.5%]">
                         Lapisan Dalam Tutup
                       </th>
-                      <th className="py-3.5 px-2.5 w-[10.5%]">
+                      <th className="py-2.5 px-2 w-[10.5%]">
                         Lapisan Luar Body
                       </th>
-                      <th className="py-3.5 px-2.5 w-[10.5%]">
+                      <th className="py-2.5 px-2 w-[10.5%]">
                         Lapisan Luar Tutup
                       </th>
-                      <th className="py-3.5 px-2.5 w-[9.5%]">Pisau Body</th>
-                      <th className="py-3.5 px-2.5 w-[10%]">Pisau Tutup</th>
-                      <th className="py-3.5 pl-2.5 pr-4 text-right rounded-tr-lg w-[3.5%]">
+                      <th className="py-2.5 px-2 w-[9.5%]">Pisau Body</th>
+                      <th className="py-2.5 px-2 w-[10%]">Pisau Tutup</th>
+                      <th className="py-2.5 pl-2 pr-3 text-right rounded-tr-lg w-[3.5%]">
                         Aksi
                       </th>
                     </tr>
@@ -3653,7 +3764,7 @@ export default function App() {
                       <tr>
                         <td
                           colSpan={10}
-                          className="py-12 text-center text-sm text-[#8FA599]"
+                          className="py-8 text-center text-xs text-[#8FA599]"
                         >
                           Tidak ada data rumus model yang cocok dengan pencarian.
                         </td>
@@ -3665,10 +3776,10 @@ export default function App() {
                           className="group hover:bg-[#10291E]/60 transition-colors"
                         >
                           {/* 1. Model Box */}
-                          <td className="py-4 pl-4 pr-3 align-top">
+                          <td className="py-2.5 pl-3 pr-2.5 align-top">
                             <button
                               onClick={() => openEditFormulaModal(item)}
-                              className="text-left text-xs sm:text-sm font-bold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer leading-snug"
+                              className="text-left text-xs font-bold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer leading-snug"
                               title="Klik untuk ubah rumus model ini"
                             >
                               {item.modelBox}
@@ -3676,92 +3787,92 @@ export default function App() {
                           </td>
 
                           {/* 2. Board Body */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.boardBody}
                             </div>
                           </td>
 
                           {/* 3. Board Tutup */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.boardTutup}
                             </div>
                           </td>
 
                           {/* 4. Lapisan Dalam Body */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.lapisanDalamBody}
                             </div>
                           </td>
 
                           {/* 5. Lapisan Dalam Tutup */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.lapisanDalamTutup}
                             </div>
                           </td>
 
                           {/* 6. Lapisan Luar Body */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.lapisanLuarBody}
                             </div>
                           </td>
 
                           {/* 7. Lapisan Luar Tutup */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.lapisanLuarTutup}
                             </div>
                           </td>
 
                           {/* 8. Pisau Body */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.pisauBody}
                             </div>
                           </td>
 
                           {/* 9. Pisau Tutup */}
-                          <td className="py-3.5 px-2 align-top">
+                          <td className="py-2 px-2 align-top">
                             <div
                               onClick={() => openEditFormulaModal(item)}
-                              className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3 font-mono-tabular text-[11px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                              className="rounded-md border border-[#D4AF37]/15 bg-[#081610] p-2 font-mono-tabular text-[10.5px] leading-relaxed text-[#E2ECE6] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
                             >
                               {item.pisauTutup}
                             </div>
                           </td>
 
                           {/* 10. Aksi */}
-                          <td className="py-3.5 pl-2 pr-4 align-top text-right">
+                          <td className="py-2 pl-2 pr-3 align-top text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {deleteFormulaConfirmId === item.id ? (
                                 <button
                                   onClick={() => handleDeleteFormula(item.id)}
-                                  className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                  className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
                                   title="Konfirmasi Hapus"
                                 >
                                   Hapus?
@@ -3769,11 +3880,11 @@ export default function App() {
                               ) : (
                                 <button
                                   onClick={() => setDeleteFormulaConfirmId(item.id)}
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
                                   title={`Hapus ${item.modelBox}`}
                                   aria-label={`Hapus ${item.modelBox}`}
                                 >
-                                  <Trash2 className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-3 w-3" />
                                 </button>
                               )}
                             </div>
@@ -3787,18 +3898,18 @@ export default function App() {
             </section>
           ) : activeMenu === 'ketentuan-logika' ? (
             /* Ketentuan Logika View (Aturan Kedua setelah Modal Kalkulator) with Logika Model, Logika Mesin, Logika Harga Tabs */
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Banner Penjelasan Hirarki Aturan Ke-2 */}
-              <div className="rounded-2xl border border-[#D4AF37]/30 bg-[#0B1D15] px-5 py-4 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-start sm:items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] font-mono-tabular text-xs font-bold text-[#E5C158]">
+              <div className="rounded-xl border border-[#D4AF37]/30 bg-[#0B1D15] px-4 py-3 shadow-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#D4AF37]/35 bg-[#122D22] font-mono-tabular text-xs font-bold text-[#E5C158]">
                     02
                   </div>
                   <div>
                     <h2 className="text-xs sm:text-sm font-bold text-[#E5C158]">
                       Aturan Tahap Kedua — Ketentuan Logika Kalkulator Box
                     </h2>
-                    <p className="text-xs text-[#94A89B] mt-0.5 leading-relaxed">
+                    <p className="text-[11px] text-[#94A89B] mt-0.5 leading-relaxed">
                       Digunakan setelah membaca database <strong>Modal Kalkulator</strong> (Tahap 01) sebagai aturan logika penentu perhitungan <strong>Harga Modal (HPP)</strong> dan <strong>Harga Jual</strong> pada Kalkulator Box.
                     </p>
                   </div>
@@ -3806,7 +3917,7 @@ export default function App() {
               </div>
 
               {/* Top Tab Selector: Logika Model, Logika Mesin, Logika Harga */}
-              <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-[#D4AF37]/25 bg-[#0B1D15] p-2 shadow-lg">
+              <div className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-[#D4AF37]/25 bg-[#0B1D15] p-1.5 shadow-md">
                 {LOGIC_TABS.map((tab) => {
                   const TabIcon = tab.icon;
                   const isTabActive = activeLogicTab === tab.id;
@@ -3817,14 +3928,14 @@ export default function App() {
                         setActiveLogicTab(tab.id);
                         setDeleteLogicConfirmId(null);
                       }}
-                      className={`flex items-center gap-2.5 rounded-xl px-5 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-150 whitespace-nowrap cursor-pointer ${
                         isTabActive
-                          ? 'bg-[#D4AF37] text-[#07140F] shadow-md'
+                          ? 'bg-[#D4AF37] text-[#07140F] shadow-sm'
                           : 'text-[#A9BEB2] hover:bg-[#122D22] hover:text-[#F3D77D]'
                       }`}
                     >
                       <TabIcon
-                        className={`h-4 w-4 shrink-0 ${
+                        className={`h-3.5 w-3.5 shrink-0 ${
                           isTabActive ? 'text-[#07140F]' : 'text-[#D4AF37]'
                         }`}
                       />
@@ -3855,16 +3966,16 @@ export default function App() {
                     : 'Aturan perhitungan HPP (Harga Modal), margin keuntungan, tier kuantitas, dan pembulatan Harga Jual';
 
                 return (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {activeLogicTab === 'logika-harga' && (
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                         {/* Ketentuan 1: Tabel Persentase Margin (%) & Pengali */}
-                        <div className="lg:col-span-6 rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-6 shadow-xl space-y-4">
-                          <div className="border-b border-[#D4AF37]/15 pb-3.5">
-                            <h2 className="text-base sm:text-lg font-bold text-[#E5C158]">
+                        <div className="lg:col-span-6 rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-4 shadow-lg space-y-3">
+                          <div className="border-b border-[#D4AF37]/15 pb-2.5">
+                            <h2 className="text-sm sm:text-base font-bold text-[#E5C158]">
                               1. Tabel Persentase Margin (%) &amp; Pengali
                             </h2>
-                            <p className="text-xs text-[#8FA599] mt-1">
+                            <p className="text-[11px] text-[#8FA599] mt-0.5">
                               Aturan pengali untuk mencari Harga Jual dari Harga Modal:{' '}
                               <span className="font-mono-tabular text-[#F3D77D] font-semibold">
                                 Contoh: Modal x 1.82 = Ambil Margin 45%
@@ -3873,15 +3984,15 @@ export default function App() {
                           </div>
 
                           <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-left text-xs sm:text-sm">
+                            <table className="w-full border-collapse text-left text-xs">
                               <thead>
-                                <tr className="border-b border-[#D4AF37]/20 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                                  <th className="py-2.5 px-4 rounded-tl-lg">Margin (%)</th>
-                                  <th className="py-2.5 px-4">Pengali</th>
-                                  <th className="py-2.5 px-4 rounded-tr-lg">Rumus Harga Jual</th>
+                                <tr className="border-b border-[#D4AF37]/20 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                                  <th className="py-2 px-3 rounded-tl-lg">Margin (%)</th>
+                                  <th className="py-2 px-3">Pengali</th>
+                                  <th className="py-2 px-3 rounded-tr-lg">Rumus Harga Jual</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-[#D4AF37]/15 font-mono-tabular">
+                              <tbody className="divide-y divide-[#D4AF37]/15 font-mono-tabular text-xs">
                                 {MARGIN_MULTIPLIER_TABLE.map((row) => {
                                   const isExample = row.marginPct === 45;
                                   return (
@@ -3893,16 +4004,16 @@ export default function App() {
                                           : 'hover:bg-[#10291E]/60 text-[#F4F1EA]'
                                       }
                                     >
-                                      <td className="py-2.5 px-4 font-semibold text-[#E5C158]">
+                                      <td className="py-2 px-3 font-semibold text-[#E5C158]">
                                         {row.marginLabel}
                                       </td>
-                                      <td className="py-2.5 px-4 font-bold">
+                                      <td className="py-2 px-3 font-bold">
                                         {row.pengali.toFixed(2)}
                                       </td>
-                                      <td className="py-2.5 px-4 text-xs text-[#B8C7BE]">
+                                      <td className="py-2 px-3 text-[11px] text-[#B8C7BE]">
                                         {row.rumusHargaJual}
                                         {isExample && (
-                                          <span className="ml-2 inline-block rounded bg-[#D4AF37] px-1.5 py-0.5 font-sans text-[10px] font-bold text-[#07140F]">
+                                          <span className="ml-2 inline-block rounded bg-[#D4AF37] px-1.5 py-0.5 font-sans text-[9px] font-bold text-[#07140F]">
                                             Contoh 45%
                                           </span>
                                         )}
@@ -3916,37 +4027,37 @@ export default function App() {
                         </div>
 
                         {/* Ketentuan 2: Logika Margin Berdasarkan Qty */}
-                        <div className="lg:col-span-6 rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-6 shadow-xl space-y-4">
-                          <div className="border-b border-[#D4AF37]/15 pb-3.5">
-                            <h2 className="text-base sm:text-lg font-bold text-[#E5C158]">
+                        <div className="lg:col-span-6 rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-4 shadow-lg space-y-3">
+                          <div className="border-b border-[#D4AF37]/15 pb-2.5">
+                            <h2 className="text-sm sm:text-base font-bold text-[#E5C158]">
                               2. Ketentuan Logika Margin Berdasarkan Qty
                             </h2>
-                            <p className="text-xs text-[#8FA599] mt-1">
+                            <p className="text-[11px] text-[#8FA599] mt-0.5">
                               Penentuan persentase margin otomatis dan interpolasi berdasarkan jumlah pesanan (Qty)
                             </p>
                           </div>
 
-                          <ul className="space-y-2.5">
+                          <ul className="space-y-2">
                             {MARGIN_QTY_TIERS.map((tier) => (
                               <li
                                 key={tier.id}
-                                className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
+                                className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5"
                               >
                                 <div className="space-y-0.5">
-                                  <div className="font-mono-tabular text-xs sm:text-sm font-bold text-[#F4F1EA]">
+                                  <div className="font-mono-tabular text-xs font-bold text-[#F4F1EA]">
                                     • {tier.rentangQty} :{' '}
                                     <span className="text-[#E5C158]">{tier.ketentuanMargin}</span>
                                   </div>
-                                  <p className="text-[11px] text-[#8FA599]">{tier.keterangan}</p>
+                                  <p className="text-[10px] text-[#8FA599]">{tier.keterangan}</p>
                                 </div>
-                                <span className="self-start sm:self-auto shrink-0 rounded-lg border border-[#D4AF37]/30 bg-[#122D22] px-2.5 py-1 font-mono-tabular text-xs font-semibold text-[#F3D77D]">
+                                <span className="self-start sm:self-auto shrink-0 rounded-md border border-[#D4AF37]/30 bg-[#122D22] px-2 py-0.5 font-mono-tabular text-[11px] font-semibold text-[#F3D77D]">
                                   Pengali: {tier.pengaliRange}
                                 </span>
                               </li>
                             ))}
                           </ul>
 
-                          <div className="rounded-xl border border-[#D4AF37]/30 bg-[#122D22]/70 p-3.5 text-xs text-[#B8C7BE] leading-relaxed">
+                          <div className="rounded-lg border border-[#D4AF37]/30 bg-[#122D22]/70 p-2.5 text-[11px] text-[#B8C7BE] leading-relaxed">
                             <strong className="text-[#E5C158]">Cara Kerja:</strong> Sistem menentukan{' '}
                             <strong className="text-[#F4F1EA]">Margin (%)</strong> dari Qty pesanan (dengan interpolasi sesuai rentang di atas), lalu mengambil nilai{' '}
                             <strong className="text-[#F4F1EA]">Pengali</strong> untuk menghitung{' '}
@@ -3956,212 +4067,223 @@ export default function App() {
                       </div>
                     )}
 
-                    <section className="rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-5 sm:p-8 shadow-xl">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#D4AF37]/15">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2.5">
-                          <TabIcon className="h-5 w-5 text-[#D4AF37] shrink-0" />
-                          <h1 className="text-lg sm:text-xl font-bold text-[#E5C158] tracking-tight">
-                            Tabel Ketentuan Logika — {currentLogicTabObj.label}
-                          </h1>
+                    <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <TabIcon className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                            <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
+                              Tabel Ketentuan Logika — {currentLogicTabObj.label}
+                            </h1>
+                          </div>
+                          <p className="text-[11px] sm:text-xs text-[#8FA599]">
+                            {subtitleText}
+                          </p>
                         </div>
-                        <p className="text-xs sm:text-sm text-[#8FA599]">
-                          {subtitleText}
-                        </p>
+
+                        <button
+                          onClick={openAddLogicModal}
+                          className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                        >
+                          <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                          <span>Tambah {currentLogicTabObj.label}</span>
+                        </button>
                       </div>
 
-                      <button
-                        onClick={openAddLogicModal}
-                        className="flex items-center justify-center gap-2 rounded-lg bg-[#D4AF37] px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
-                      >
-                        <Plus className="h-4 w-4 stroke-[2.5]" />
-                        <span>Tambah {currentLogicTabObj.label}</span>
-                      </button>
-                    </div>
-
-                    <div className="mt-6 overflow-x-auto">
-                      <table className="w-full border-collapse text-left">
-                        <thead>
-                          <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-xs font-semibold text-[#94A89B]">
-                            <th className="py-3.5 pl-4 pr-4 rounded-tl-lg w-[22%]">
-                              Nama Parameter / {currentLogicTabObj.label}
-                            </th>
-                            <th className="py-3.5 px-4 w-[22%]">
-                              Kondisi / Syarat Trigger
-                            </th>
-                            <th className="py-3.5 px-4 w-[18%]">
-                              Rumus / Keputusan Logika
-                            </th>
-                            <th className="py-3.5 px-4 w-[22%]">Keterangan</th>
-                            <th className="py-3.5 pl-4 pr-4 rounded-tr-lg w-[16%]">
-                              Aksi
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#D4AF37]/15 text-sm">
-                          {currentList.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="p-0">
-                                <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">
-                                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                                    <Construction className="h-7 w-7" />
-                                  </div>
-                                  <h2 className="font-display text-xl sm:text-2xl font-bold tracking-wide text-[#E5C158] uppercase">
-                                    MAINTENANCE
-                                  </h2>
-                                  <p className="mt-1.5 text-sm font-medium text-[#F4F1EA]">
-                                    Halaman Tabel{' '}
-                                    <span className="text-[#E5C158]">
-                                      {currentLogicTabObj.label}
-                                    </span>{' '}
-                                    sedang dalam proses maintenance
-                                  </p>
-                                  <p className="mt-1 max-w-md text-xs sm:text-sm text-[#8FA599] leading-relaxed">
-                                    Aturan {currentLogicTabObj.label.toLowerCase()} (Tahap 2 setelah Modal Kalkulator untuk perhitungan harga modal/jual) saat ini masih dikosongkan sementara. Anda juga dapat menekan tombol{' '}
-                                    <strong>+ Tambah {currentLogicTabObj.label}</strong> di kanan atas.
-                                  </p>
-                                </div>
-                              </td>
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="w-full border-collapse text-left">
+                          <thead>
+                            <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                              <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[22%]">
+                                Nama Parameter / {currentLogicTabObj.label}
+                              </th>
+                              <th className="py-2.5 px-3 w-[22%]">
+                                Kondisi / Syarat Trigger
+                              </th>
+                              <th className="py-2.5 px-3 w-[18%]">
+                                Rumus / Keputusan Logika
+                              </th>
+                              <th className="py-2.5 px-3 w-[22%]">Keterangan</th>
+                              <th className="py-2.5 pl-3 pr-3 rounded-tr-lg w-[16%]">
+                                Aksi
+                              </th>
                             </tr>
-                          ) : (
-                            currentList.map((item) => {
-                              const dashIdx = item.namaAturan.indexOf('–');
-                              return (
-                                <tr
-                                  key={item.id}
-                                  className="group hover:bg-[#10291E]/70 transition-colors"
-                                >
-                                  <td className="py-4 pl-4 pr-4 align-top">
-                                    <button
-                                      onClick={() => openEditLogicModal(item)}
-                                      className="text-left text-xs sm:text-sm leading-relaxed text-[#F4F1EA] hover:text-[#F5D77F] transition-colors cursor-pointer"
-                                    >
-                                      {dashIdx !== -1 ? (
-                                        <>
-                                          <span>{item.namaAturan.slice(0, dashIdx + 1)} </span>
-                                          <strong className="font-bold text-[#E5C158]">
-                                            {item.namaAturan.slice(dashIdx + 1).trim()}
-                                          </strong>
-                                        </>
-                                      ) : (
-                                        <span className="font-semibold text-[#E5C158]">
-                                          {item.namaAturan}
-                                        </span>
-                                      )}
-                                    </button>
-                                  </td>
-
-                                  <td className="py-3.5 px-4 align-top">
-                                    <div
-                                      onClick={() => openEditLogicModal(item)}
-                                      className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3.5 py-2.5 text-left font-mono-tabular text-xs leading-relaxed text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
-                                    >
-                                      {item.kondisiTrigger}
+                          </thead>
+                          <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
+                            {currentList.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="p-0">
+                                  <div className="flex min-h-[200px] flex-col items-center justify-center px-4 py-8 text-center">
+                                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-3">
+                                      <Construction className="h-5 w-5" />
                                     </div>
-                                  </td>
-
-                                  <td className="py-3.5 px-4 align-top">
-                                    <div
-                                      onClick={() => openEditLogicModal(item)}
-                                      className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] px-3.5 py-2.5 text-left font-mono-tabular text-xs font-semibold leading-relaxed text-[#E5C158] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
-                                    >
-                                      {item.rumusTindakan}
-                                    </div>
-                                  </td>
-
-                                  <td className="py-4 px-4 align-top text-xs sm:text-sm leading-relaxed text-[#A7BBB0]">
-                                    {item.keterangan}
-                                  </td>
-
-                                  <td className="py-3.5 pl-4 pr-4 align-top">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span
+                                    <h2 className="font-display text-base sm:text-lg font-bold tracking-wide text-[#E5C158] uppercase">
+                                      MAINTENANCE
+                                    </h2>
+                                    <p className="mt-1 text-xs font-medium text-[#F4F1EA]">
+                                      Halaman Tabel{' '}
+                                      <span className="text-[#E5C158]">
+                                        {currentLogicTabObj.label}
+                                      </span>{' '}
+                                      sedang dalam proses maintenance
+                                    </p>
+                                    <p className="mt-0.5 max-w-md text-[11px] text-[#8FA599] leading-relaxed">
+                                      Aturan {currentLogicTabObj.label.toLowerCase()} (Tahap 2 setelah Modal Kalkulator untuk perhitungan harga modal/jual) saat ini masih dikosongkan sementara. Anda juga dapat menekan tombol{' '}
+                                      <strong>+ Tambah {currentLogicTabObj.label}</strong> di kanan atas.
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : (
+                              currentList.map((item) => {
+                                const dashIdx = item.namaAturan.indexOf('–');
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className="group hover:bg-[#10291E]/70 transition-colors"
+                                  >
+                                    <td className="py-2.5 pl-3 pr-3 align-top">
+                                      <button
                                         onClick={() => openEditLogicModal(item)}
-                                        className="font-mono-tabular text-xs font-semibold text-[#F4F1EA] cursor-pointer hover:text-[#E5C158]"
+                                        className="text-left text-xs leading-relaxed text-[#F4F1EA] hover:text-[#F5D77F] transition-colors cursor-pointer"
                                       >
-                                        {item.aksi || '-'}
-                                      </span>
-
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <button
-                                          onClick={() => openEditLogicModal(item)}
-                                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
-                                          title={`Ubah ${item.namaAturan}`}
-                                        >
-                                          <Pencil className="h-3.5 w-3.5" />
-                                        </button>
-
-                                        {deleteLogicConfirmId === item.id ? (
-                                          <button
-                                            onClick={() => handleDeleteLogicItem(item.id)}
-                                            className="inline-flex items-center justify-center rounded-lg bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
-                                          >
-                                            Hapus?
-                                          </button>
+                                        {dashIdx !== -1 ? (
+                                          <>
+                                            <span>{item.namaAturan.slice(0, dashIdx + 1)} </span>
+                                            <strong className="font-bold text-[#E5C158]">
+                                              {item.namaAturan.slice(dashIdx + 1).trim()}
+                                            </strong>
+                                          </>
                                         ) : (
-                                          <button
-                                            onClick={() => setDeleteLogicConfirmId(item.id)}
-                                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
-                                            title={`Hapus ${item.namaAturan}`}
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
+                                          <span className="font-semibold text-[#E5C158]">
+                                            {item.namaAturan}
+                                          </span>
                                         )}
+                                      </button>
+                                    </td>
+
+                                    <td className="py-2 px-3 align-top">
+                                      <div
+                                        onClick={() => openEditLogicModal(item)}
+                                        className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1.5 text-left font-mono-tabular text-xs leading-relaxed text-[#F4F1EA] hover:border-[#D4AF37]/45 transition-colors cursor-pointer"
+                                      >
+                                        {item.kondisiTrigger}
                                       </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
+                                    </td>
+
+                                    <td className="py-2 px-3 align-top">
+                                      <div
+                                        onClick={() => openEditLogicModal(item)}
+                                        className="rounded-md border border-[#D4AF37]/15 bg-[#081610] px-2.5 py-1.5 text-left font-mono-tabular text-xs font-semibold leading-relaxed text-[#E5C158] hover:border-[#D4AF37]/45 transition-colors cursor-pointer whitespace-pre-line"
+                                      >
+                                        {item.rumusTindakan}
+                                      </div>
+                                    </td>
+
+                                    <td className="py-2 px-3 align-top text-[11px] sm:text-xs leading-relaxed text-[#A7BBB0]">
+                                      {item.keterangan}
+                                    </td>
+
+                                    <td className="py-2 pl-3 pr-3 align-top">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span
+                                          onClick={() => openEditLogicModal(item)}
+                                          className="font-mono-tabular text-xs font-semibold text-[#F4F1EA] cursor-pointer hover:text-[#E5C158]"
+                                        >
+                                          {item.aksi || '-'}
+                                        </span>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button
+                                            onClick={() => openEditLogicModal(item)}
+                                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                            title={`Ubah ${item.namaAturan}`}
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+
+                                          {deleteLogicConfirmId === item.id ? (
+                                            <button
+                                              onClick={() => handleDeleteLogicItem(item.id)}
+                                              className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                            >
+                                              Hapus?
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => setDeleteLogicConfirmId(item.id)}
+                                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                              title={`Hapus ${item.namaAturan}`}
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
                   </div>
                 );
               })()}
             </div>
           ) : (
             /* Centered Maintenance State for all other menus */
-            <section className="flex min-h-[520px] flex-col items-center justify-center rounded-2xl border border-[#D4AF37]/25 bg-[#0C2017] p-8 text-center shadow-xl">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-5">
-                <Construction className="h-8 w-8" />
+            <section className="flex min-h-[400px] flex-col items-center justify-center rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-6 text-center shadow-lg">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
+                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir' ? (
+                  <Truck className="h-6 w-6" />
+                ) : (
+                  <Construction className="h-6 w-6" />
+                )}
               </div>
 
-              <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-wide text-[#E5C158] uppercase">
-                MAINTENANCE
+              <h1 className="font-display text-lg sm:text-xl font-bold tracking-wide text-[#E5C158] uppercase">
+                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir'
+                  ? 'HALAMAN KOSONG'
+                  : 'MAINTENANCE'}
               </h1>
 
-              <p className="mt-2 text-sm sm:text-base font-medium text-[#F4F1EA]">
-                Modul <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang dalam pemeliharaan
+              <p className="mt-1.5 text-xs sm:text-sm font-medium text-[#F4F1EA]">
+                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir' ? (
+                  <>Menu <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang disiapkan</>
+                ) : (
+                  <>Modul <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang dalam pemeliharaan</>
+                )}
               </p>
 
-              <p className="mt-1.5 max-w-md text-xs sm:text-sm text-[#8FA599] leading-relaxed">
-                Data pada menu ini sengaja dikosongkan sementara. Silakan buka grup{' '}
-                <strong className="text-[#E5C158] font-medium">Modal Kalkulator</strong> di sidebar sebelah kiri untuk melihat Data Proses, Biaya Finishing, atau Rumus Model.
+              <p className="mt-1 max-w-md text-[11px] sm:text-xs text-[#8FA599] leading-relaxed">
+                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir'
+                  ? 'Halaman ini masih dikosongkan sementara sesuai permintaan dan siap untuk integrasi perhitungan serta tarif ongkos kirim.'
+                  : 'Data pada menu ini sengaja dikosongkan sementara. Silakan buka grup Modal Kalkulator di sidebar sebelah kiri untuk melihat Data Proses, Biaya Finishing, atau Rumus Model.'}
               </p>
 
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
                 <button
                   onClick={() => handleSelectMenu('kalkulator-box')}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#D4AF37] px-5 py-2.5 text-xs sm:text-sm font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shadow-sm"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-4 py-2 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer shadow-sm"
                 >
-                  <Box className="h-4 w-4" />
+                  <Box className="h-3.5 w-3.5" />
                   <span>Buka Kalkulator Hardbox</span>
                 </button>
                 <button
                   onClick={() => handleSelectMenu('data-proses')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#D4AF37]/35 bg-[#122D22] px-5 py-2.5 text-xs sm:text-sm font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
                 >
-                  <Printer className="h-4 w-4 text-[#D4AF37]" />
+                  <Printer className="h-3.5 w-3.5 text-[#D4AF37]" />
                   <span>Buka Data Proses</span>
                 </button>
                 <button
                   onClick={() => handleSelectMenu('rumus-model')}
-                  className="inline-flex items-center gap-2 rounded-xl border border-[#D4AF37]/35 bg-[#122D22] px-5 py-2.5 text-xs sm:text-sm font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
                 >
-                  <BookOpen className="h-4 w-4 text-[#D4AF37]" />
+                  <BookOpen className="h-3.5 w-3.5 text-[#D4AF37]" />
                   <span>Buka Rumus Model</span>
                 </button>
               </div>

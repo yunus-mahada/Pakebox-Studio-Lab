@@ -112,12 +112,10 @@ export const INITIAL_LOGIKA_MODEL_DATA: LogicRuleItem[] = [
     namaAturan: 'Sambungan 3 – Model Buka Tutup',
     kondisiTrigger: 'Model = Buka Tutup (Terpisah / Full) AND bentangan lapisan luar tidak muat utuh di mesin',
     rumusTindakan:
-      'Lapisan Luar Tutup: [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2) | ' +
-      'Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt] & [T] (×2) | ' +
-      'Lapisan Luar Body: [P] | [L+T+4] & [T+4] (×2) | ' +
-      'Lapisan Dalam Body: [P] | [L+T] & [T] (×2)',
+      'Lapisan Luar Tutup: [P+0.6] | [L+0.6+0.6+T+T+4] & [T+4] | [L+4] (×2) | ' +
+      'Lapisan Luar Body: [P] | [L+T+T+4] & [T+4] | [L+4] (×2)',
     keterangan:
-      'Pemecahan layout 3 bagian (Sambungan 3) untuk box buka tutup pisah. Digunakan ketika bentangan lapisan luar tidak muat dalam 1 lembar utuh di mesin yang dipilih. Ketentuan: Jika pada mesin (Digital, Offset 52, atau Offset 58) muat utuh, maka rekomendasi sambungan 3 dan 5 tidak aktif. Sambungan 3 aktif hanya jika mesin tidak bisa mencetak utuh (pada Digital, opsi utuh tidak ditampilkan).',
+      'Pemecahan layout 3 bagian (Sambungan 3) untuk box buka tutup pisah. Digunakan ketika bentangan lapisan luar tidak muat dalam 1 lembar utuh di mesin yang dipilih. Ketentuan: Jika pada mesin (Digital, Offset 52, atau Offset 58) muat utuh, maka rekomendasi sambungan 3 dan 5 tidak aktif. Sambungan 3 aktif jika mesin tidak bisa mencetak utuh (pada Digital, opsi utuh tidak ditampilkan).',
     aksi: 'Hitung biaya per potongan × qty, bandingkan dengan metode Utuh/Sambungan 5',
   },
   {
@@ -125,13 +123,34 @@ export const INITIAL_LOGIKA_MODEL_DATA: LogicRuleItem[] = [
     namaAturan: 'Sambungan 5 – Model Buka Tutup (Fallback)',
     kondisiTrigger: 'Model = Buka Tutup AND Sambungan 3 tidak muat di mesin',
     rumusTindakan:
-      'Lapisan Luar Tutup: [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2) & [P] (×2) | ' +
-      'Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt] & [T] (×2) & [P] (×2) | ' +
-      'Lapisan Luar Body: [P] | [L+T+4] & [T+4] (×2) & [P+4] (×2) | ' +
-      'Lapisan Dalam Body: [P] | [L+T] & [T] (×2) & [P] (×2)',
+      'Lapisan Tutup Luar: [P+0.6] | [L+0.6] & [T+4] | [L+4] (×2) & [T+4] | [P+4] (×2) | ' +
+      'Lapisan Body Luar: [P] | [L] & [T+4] | [L+4] (×2) & [T+4] | [P+4] (×2)',
     keterangan:
-      'Pemecahan layout 5 bagian (Sambungan 5) untuk box buka tutup pisah. Digunakan sebagai fallback ketika Sambungan 3 tidak muat di Digital/Offset. Ketentuan: Jika pada mesin (Digital, Offset 52, atau Offset 58) muat utuh, maka rekomendasi sambungan 3 dan 5 tidak aktif. Sambungan 5 aktif hanya jika mesin tidak bisa mencetak utuh.',
+      'Pemecahan layout 5 bagian (Sambungan 5) untuk box buka tutup pisah. Digunakan sebagai fallback ketika Sambungan 3 tidak muat di Digital/Offset. Ketentuan: Pada box ukuran besar dan qty sedikit (mis. 40 x 30 x 12 qty 50), Sambungan 5 di Digital menjadi opsi yang sangat ekonomis dan tetap ditampilkan bersama Offset 52/58.',
     aksi: 'Hitung biaya per potongan × qty, bandingkan dengan Sambungan 3 dan Utuh',
+  },
+  {
+    id: 'lm-6',
+    namaAturan: 'Rumus Sambungan Khusus (Magnet Model)',
+    kondisiTrigger:
+      'Model Box = Box Magnet (Model Buku) AND bentangan lapisan tidak muat di Plano / Mesin',
+    rumusTindakan:
+      'Lapisan Luar Tutup:\n' +
+      '- Total P. Board Tutup + 4cm | ((L. Board Tutup + 4cm)/2)+1.5\n' +
+      '- Total P. Board Tutup + 4cm | ((L. Board Tutup + 4cm)/2)+1\n\n' +
+      'Lapisan Dalam tutup:\n' +
+      '- P + 1 | L + (T/2) + 1 + 0.5\n' +
+      '- P + 1 | L + T + 1\n\n' +
+      'Lapisan Luar body:\n' +
+      '- P + L + 4 | T + 4\n' +
+      '- P + L | T + 4\n\n' +
+      'Lapisan Dalam body:\n' +
+      '- P | L + (Tx2)\n' +
+      '- L x 2 | T x 2',
+    keterangan:
+      'Pemecahan layout dua bagian pada box magnet jika lapisan tidak muat di Plano / Mesin. Membagi dimensi spesifik jika terjadi Splicing (Sambung 2) pada box magnet. Rumus ini di gunakan ketika sambung 2 masih tidak muat ke bentangan digital/offset.',
+    aksi:
+      'Pecah layout komponen cover tutup dan body box magnet menjadi 2 potongan spesifik (Sambung 2)',
   },
 ];
 
@@ -202,6 +221,14 @@ export const INITIAL_LOGIKA_MESIN_DATA: LogicRuleItem[] = [
     rumusTindakan: 'Bandingkan total biaya',
     keterangan: 'Sistem memilih opsi mesin cetak (Digital vs Offset) dengan total biaya termurah',
     aksi: 'Pilih mesin rekomendasi',
+  },
+  {
+    id: 'lme-9',
+    namaAturan: 'Rekomendasi Mesin – Hardbox Ukuran Besar & Qty Sedikit',
+    kondisiTrigger: 'Model Buka Tutup AND Ukuran Besar AND Qty Sedikit (mis. Qty ≤ 300 / contoh 40 x 30 x 12 Qty 50)',
+    rumusTindakan: 'Tampilkan Digital (Sambungan 3 / 5) dan Offset (Mesin 52 / Mesin 58) → Rekomendasikan yang Termurah',
+    keterangan: 'Untuk hardbox ukuran besar dengan kuantitas sedikit (contoh 40 x 30 x 12 cm qty 50), mesin Digital (Sambungan 5) menjadi alternatif yang sangat ekonomis karena tidak terkena biaya plat cetak per page. Sistem menampilkan perbandingan Digital & Offset 52/58, merekomendasikan opsi termurah, dan user dapat bebas memilih/mengeklik mesin yang diinginkan.',
+    aksi: 'Tampilkan opsi Digital & Offset, prioritaskan biaya termurah, dan izinkan user memilih opsi mesin',
   },
 ];
 

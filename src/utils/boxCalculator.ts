@@ -39,6 +39,7 @@ export interface CalculatorInputState {
   lTutupLuarName: string;
   innerboxNames: string[];
   logos?: SelectedLogoInput[];
+  selectedPrintIndex?: number;
 }
 
 export interface PrintComparisonOption {
@@ -139,6 +140,8 @@ export interface BoxCalculationResult {
   // Print comparison
   outerPaperName: string;
   printComparisons: PrintComparisonOption[];
+  selectedPrintIndex: number;
+  minPrintIndex: number;
 }
 
 export function normalizeMaterialKey(name: string | undefined): string {
@@ -617,6 +620,7 @@ export function calculateBoxEstimation(
     logoItems?: LogoProcessItem[];
     finishingItems: FinishingCostItem[];
     logikaModelItems: LogicRuleItem[];
+    logikaMesinItems?: LogicRuleItem[];
     logikaProsesItems?: LogicRuleItem[];
   }
 ): BoxCalculationResult {
@@ -1012,74 +1016,111 @@ export function calculateBoxEstimation(
       metode: 'sambungan-3' | 'sambungan-5',
       qty: number
     ): SambunganPieceSet => {
-      // Tentukan dimensi dasar sesuai komponen
-      const baseP = komponen === 'tutup' ? P + 0.6 : P;
-      const baseL = komponen === 'tutup' ? L + 0.6 + Tt : L;
-      const sisiT = T;
+      if (komponen === 'tutup') {
+        const pTutup = P + 0.6;
+        const lTutup = L + 0.6;
+        const tTutup = Tt;
 
-      if (metode === 'sambungan-3') {
-        // 3 potongan: [baseP × (baseL+4)], [baseP × (sisiT+4)] ×2  (Luar)
-        // atau       [baseP × baseL],     [baseP × sisiT]     ×2  (Dalam)
-        // Catatan: +4 cm adalah margin lapisan luar
-        const pot1P = baseP;
-        const pot1L_luar = baseL + 4;
-        const pot1L_dalam = baseL;
-        const pot2P = baseP;
-        const pot2L_luar = sisiT + 4; // ×2
-        const pot2L_dalam = sisiT;    // ×2
+        if (metode === 'sambungan-3') {
+          // Sambung 3 Tutup Luar:
+          // P+0.6 | L+0.6+0.6+T+T+4 & T+4 | L+4 (x2)
+          const pot1P = pTutup;
+          const pot1L = lTutup + 0.6 + 2 * tTutup + 4;
+          const pot2P = tTutup + 4;
+          const pot2L = lTutup + 4;
 
-        const sheets1 = Math.ceil(qty / 1);
-        const sheets2 = Math.ceil(qty / 1);
+          const luarParts = [
+            `Pot 1 (Tengah): ${pot1P.toFixed(1)} × ${pot1L.toFixed(1)} cm (${qty} lbr)`,
+            `Pot 2+3 (Samping ×2): ${pot2P.toFixed(1)} × ${pot2L.toFixed(1)} cm (${qty * 2} lbr)`,
+          ];
 
-        const luarParts = [
-          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_luar.toFixed(1)} cm (${qty} lbr)`,
-          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
-        ];
-        const dalamParts = [
-          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_dalam.toFixed(1)} cm (${qty} lbr)`,
-          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_dalam.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
-        ];
+          return {
+            pieces: [
+              { p: pot1P, l: pot1L, qty, label: 'Tutup Pot.1 (Tengah)' },
+              { p: pot2P, l: pot2L, qty: qty * 2, label: 'Tutup Pot.2+3 (Samping ×2)' },
+            ],
+            totalSheets: qty + qty * 2,
+            parts: luarParts,
+          };
+        } else {
+          // Sambung 5 Tutup Luar:
+          // P+0.6 | L+0.6 & T+4 | L+4 (x2) & T+4 | P (x2)
+          const pot1P = pTutup;
+          const pot1L = lTutup;
+          const pot2P = tTutup + 4;
+          const pot2L = lTutup + 4;
+          const pot3P = tTutup + 4;
+          const pot3L = pTutup + 3.4; // P + 4 cm margin
 
-        // Total lembar = 1×qty + 2×qty = 3×qty
-        return {
-          pieces: [
-            { p: pot1P, l: pot1L_luar, qty: sheets1, label: `Pot.1 (Tengah)` },
-            { p: pot2P, l: pot2L_luar, qty: sheets2 * 2, label: `Pot.2+3 (Samping ×2)` },
-          ],
-          totalSheets: sheets1 + sheets2 * 2,
-          parts: luarParts,
-        };
+          const luarParts = [
+            `Pot 1 (Muka): ${pot1P.toFixed(1)} × ${pot1L.toFixed(1)} cm (${qty} lbr)`,
+            `Pot 2+3 (Sisi L ×2): ${pot2P.toFixed(1)} × ${pot2L.toFixed(1)} cm (${qty * 2} lbr)`,
+            `Pot 4+5 (Sisi P ×2): ${pot3P.toFixed(1)} × ${pot3L.toFixed(1)} cm (${qty * 2} lbr)`,
+          ];
+
+          return {
+            pieces: [
+              { p: pot1P, l: pot1L, qty, label: 'Tutup Pot.1 (Muka)' },
+              { p: pot2P, l: pot2L, qty: qty * 2, label: 'Tutup Pot.2+3 (Sisi L ×2)' },
+              { p: pot3P, l: pot3L, qty: qty * 2, label: 'Tutup Pot.4+5 (Sisi P ×2)' },
+            ],
+            totalSheets: qty + qty * 2 + qty * 2,
+            parts: luarParts,
+          };
+        }
       } else {
-        // sambungan-5: 5 potongan
-        // Potongan luar: [baseP × (baseL+4)], [baseP × (sisiT+4)] ×2, [baseP × (baseP+4)] ×2
-        // Potongan dalam: tidak dihitung terpisah (digunakan oleh lapisan dalam)
-        const pot1P = baseP;
-        const pot1L_luar = baseL + 4;
-        const pot2P = baseP;
-        const pot2L_luar = sisiT + 4;   // ×2
-        // Potongan sisi pendek
-        const sisiPendekP_luar = komponen === 'tutup' ? P + 4 : P + 4;
-        const sisiPendekL_luar = komponen === 'tutup' ? P + 4 : P + 4;
+        // Komponen BODY
+        const pBody = P;
+        const lBody = L;
+        const tBody = T;
 
-        const sheets1 = Math.ceil(qty / 1);
-        const sheets2 = Math.ceil(qty / 1);
-        const sheets3 = Math.ceil(qty / 1);
+        if (metode === 'sambungan-3') {
+          // Sambung 3 Body Luar:
+          // P | L+T+T+4 & T+4 | L+4 (x2)
+          const pot1P = pBody;
+          const pot1L = lBody + 2 * tBody + 4;
+          const pot2P = tBody + 4;
+          const pot2L = lBody + 4;
 
-        const luarParts = [
-          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_luar.toFixed(1)} cm (${qty} lbr)`,
-          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
-          `Pot 4+5: ${sisiPendekP_luar.toFixed(1)} × ${sisiPendekL_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
-        ];
+          const luarParts = [
+            `Pot 1 (Tengah): ${pot1P.toFixed(1)} × ${pot1L.toFixed(1)} cm (${qty} lbr)`,
+            `Pot 2+3 (Samping ×2): ${pot2P.toFixed(1)} × ${pot2L.toFixed(1)} cm (${qty * 2} lbr)`,
+          ];
 
-        return {
-          pieces: [
-            { p: pot1P, l: pot1L_luar, qty: sheets1, label: 'Pot.1 (Muka)' },
-            { p: pot2P, l: pot2L_luar, qty: sheets2 * 2, label: 'Pot.2+3 (Sisi panjang ×2)' },
-            { p: sisiPendekP_luar, l: sisiPendekL_luar, qty: sheets3 * 2, label: 'Pot.4+5 (Sisi pendek ×2)' },
-          ],
-          totalSheets: sheets1 + sheets2 * 2 + sheets3 * 2,
-          parts: luarParts,
-        };
+          return {
+            pieces: [
+              { p: pot1P, l: pot1L, qty, label: 'Body Pot.1 (Tengah)' },
+              { p: pot2P, l: pot2L, qty: qty * 2, label: 'Body Pot.2+3 (Samping ×2)' },
+            ],
+            totalSheets: qty + qty * 2,
+            parts: luarParts,
+          };
+        } else {
+          // Sambung 5 Body Luar:
+          // P | L & T+4 | L+4 (x2) & T+4 | P+4 (x2)
+          const pot1P = pBody;
+          const pot1L = lBody;
+          const pot2P = tBody + 4;
+          const pot2L = lBody + 4;
+          const pot3P = tBody + 4;
+          const pot3L = pBody + 4;
+
+          const luarParts = [
+            `Pot 1 (Muka): ${pot1P.toFixed(1)} × ${pot1L.toFixed(1)} cm (${qty} lbr)`,
+            `Pot 2+3 (Sisi L ×2): ${pot2P.toFixed(1)} × ${pot2L.toFixed(1)} cm (${qty * 2} lbr)`,
+            `Pot 4+5 (Sisi P ×2): ${pot3P.toFixed(1)} × ${pot3L.toFixed(1)} cm (${qty * 2} lbr)`,
+          ];
+
+          return {
+            pieces: [
+              { p: pot1P, l: pot1L, qty, label: 'Body Pot.1 (Muka)' },
+              { p: pot2P, l: pot2L, qty: qty * 2, label: 'Body Pot.2+3 (Sisi L ×2)' },
+              { p: pot3P, l: pot3L, qty: qty * 2, label: 'Body Pot.4+5 (Sisi P ×2)' },
+            ],
+            totalSheets: qty + qty * 2 + qty * 2,
+            parts: luarParts,
+          };
+        }
       }
     };
 
@@ -1726,7 +1767,15 @@ export function calculateBoxEstimation(
     printComparisons[minIdx].isRecommended = true;
   }
 
-  const chosenPrint = printComparisons[minIdx] || printComparisons[0];
+  // Opsi terpilih: default adalah rekomendasi termurah (minIdx).
+  // Namun jika user memilih opsi lain secara manual (input.selectedPrintIndex), gunakan pilihan user!
+  const userIdx = input.selectedPrintIndex;
+  const effectiveIdx =
+    userIdx !== undefined && userIdx >= 0 && userIdx < printComparisons.length
+      ? userIdx
+      : minIdx;
+
+  const chosenPrint = printComparisons[effectiveIdx] || printComparisons[minIdx] || printComparisons[0];
   const isChosenDigital = chosenPrint.label.toLowerCase().includes('digital');
 
   const systemDecision: SystemDecisionSummary = {
@@ -1885,5 +1934,7 @@ export function calculateBoxEstimation(
     totalHargaJual,
     outerPaperName: canonicalOuterName,
     printComparisons,
+    selectedPrintIndex: effectiveIdx,
+    minPrintIndex: minIdx,
   };
 }
