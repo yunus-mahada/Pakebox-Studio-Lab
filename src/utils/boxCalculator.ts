@@ -57,6 +57,10 @@ export interface PrintComparisonOption {
   isRecommended: boolean;
   bodySheetLine: string;
   tutupSheetLine: string;
+  /** Metode layout khusus Buka Tutup: 'utuh' | 'sambungan-3' | 'sambungan-5' */
+  sambunganMethod?: 'utuh' | 'sambungan-3' | 'sambungan-5';
+  /** Rincian bagian-bagian potongan sambungan (jika bukan utuh) */
+  sambunganParts?: string[];
 }
 
 export interface SystemDecisionSummary {
@@ -880,236 +884,836 @@ export function calculateBoxEstimation(
     }
   }
 
-  // Candidate 1: Digital A3+ (from digitalItems)
-  // Aturan: Digital HANYA tersedia jika lapisan luar adalah Art Paper 150 gr (AP 150).
-  // Bahan lain (RCP, Jasmine, Concorde, dll) hanya bisa diproses via Offset
-  // menggunakan ukuran plano asli bahan tersebut (mis. 109 x 79 untuk RCP).
-  const bodyIsDigitalEligible = hasOuterBody
-    ? isDigitalPrintEligible(input.lBodyLuarName)
-    : true; // jika tidak ada lapisan body, tidak menghambat
-  const tutupIsDigitalEligible = hasOuterTutup
-    ? isDigitalPrintEligible(input.lTutupLuarName)
-    : true; // jika tidak ada lapisan tutup, tidak menghambat
-  const isDigitalCandidateAllowed = bodyIsDigitalEligible && tutupIsDigitalEligible;
-
-  const digitalMachine = databases.digitalItems[0];
-  const digitalRawDim = parseDimensions(digitalMachine?.ukuranArea || '32 x 48');
-  const digMaxW = Math.max(digitalRawDim.w, digitalRawDim.h) - 0.5; // 47.5 cm
-  const digMaxH = Math.min(digitalRawDim.w, digitalRawDim.h) - 0.5; // 31.5 cm
-  const digitalRate = parseRupiahNumber(digitalMachine?.hargaCetak || 'Rp 2.000');
-
-  const calcDigitalPiece = (pieceW: number, pieceH: number) => {
-    const maxSide = Math.max(pieceW, pieceH);
-    const minSide = Math.min(pieceW, pieceH);
-    const fit = calcPlanoFit(digMaxW, digMaxH, pieceW, pieceH);
-    if (fit >= 1) {
-      const sheets = Math.ceil(safeQty / fit);
-      return {
-        fit,
-        sheets,
-        clicks: sheets,
-        status: 'utuh',
-        isValid: true,
-      };
-    }
-    // Check if even with sambung it can fit length-wise inside digMaxW
-    if (maxSide <= digMaxW + 15) {
-      const overflow = Math.max(0, Math.ceil(minSide - digMaxH + 1.5));
-      const sambungCm = Math.max(3, overflow);
-      const extraClicks = Math.ceil(safeQty * (sambungCm / 12.5));
-      const totalClicks = safeQty + extraClicks;
-      const areaRatio = (maxSide * minSide) / (digMaxW * digMaxH * 1.152);
-      const effectiveSheets = Math.ceil(safeQty * areaRatio);
-      return {
-        fit: 1,
-        sheets: effectiveSheets,
-        clicks: totalClicks,
-        status: `sambung ${sambungCm}`,
-        isValid: true,
-      };
-    }
-    return {
-      fit: 0,
-      sheets: 0,
-      clicks: 0,
-      status: 'tidak muat',
-      isValid: false,
-    };
-  };
-
-  const digBody = isDigitalCandidateAllowed && hasOuterBody
-    ? calcDigitalPiece(cutLuarBody.p, cutLuarBody.l)
-    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: isDigitalCandidateAllowed };
-  const digTutup = isDigitalCandidateAllowed && hasOuterTutup
-    ? calcDigitalPiece(cutLuarTutup.p, cutLuarTutup.l)
-    : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: isDigitalCandidateAllowed };
+  // Aturan Cetak Lapisan Luar:
+  // - AP 150 gr → bisa Digital A3+ dan/atau Offset (bandingkan, pilih termurah)
+  // - Bahan lain (RCP, Jasmine, Concorde, Linen, dll) → TIDAK PERLU CETAK.
+  //   Kertas fancy/dekoratif sudah berwarna/bertekstur, jadi hanya biaya kertas saja
+  //   yang dihitung, menggunakan ukuran plano asli bahan (mis. RCP → 109 x 79 cm).
+  const outerBodyNeedsPrint = hasOuterBody && isDigitalPrintEligible(input.lBodyLuarName);
+  const outerTutupNeedsPrint = hasOuterTutup && isDigitalPrintEligible(input.lTutupLuarName);
+  const isOuterPrintNeeded = outerBodyNeedsPrint || outerTutupNeedsPrint;
 
   const printComparisons: PrintComparisonOption[] = [];
 
-  // Hanya tambahkan kandidat Digital jika bahan memenuhi syarat (AP 150 gr)
-  if (isDigitalCandidateAllowed && digBody.isValid && digTutup.isValid) {
-    const totalDigitalClicks = digBody.clicks + digTutup.clicks;
-    const digitalPrintCost = totalDigitalClicks * digitalRate;
-    const digitalTotalOptionCost = digitalPrintCost + sharedLaminasiCost;
+  if (!isOuterPrintNeeded && (hasOuterBody || hasOuterTutup)) {
+    // =====================================================================
+    // BAHAN NON-AP150: TANPA CETAK – Hanya biaya kertas (plano asli)
+    // =====================================================================
+    const outerBodyPick = hasOuterBody
+      ? pickCheapestMaterialVariant(
+          outerBodyVariants.filter((v) => parseRupiahNumber(v.hargaLembar) > 0),
+          cutLuarBody.p,
+          cutLuarBody.l,
+          safeQty
+        )
+      : null;
+    const outerTutupPick = hasOuterTutup
+      ? pickCheapestMaterialVariant(
+          outerTutupVariants.filter((v) => parseRupiahNumber(v.hargaLembar) > 0),
+          cutLuarTutup.p,
+          cutLuarTutup.l,
+          safeQty
+        )
+      : null;
 
-    const digLayoutDesc =
-      hasOuterBody && hasOuterTutup
-        ? `Body ${digBody.fit}-up (${digBody.status}), Tutup ${digTutup.fit}-up (${digTutup.status})`
-        : `${Math.max(digBody.fit, digTutup.fit)}-up`;
+    const outerBodyPaperCost = outerBodyPick?.cost || 0;
+    const outerTutupPaperCost = outerTutupPick?.cost || 0;
+    const totalPaperOnlyCost = outerBodyPaperCost + outerTutupPaperCost;
+
+    const planoSizeLabel =
+      outerBodyPick?.item.ukuranPlano || outerTutupPick?.item.ukuranPlano || '-';
+    const totalSheets = (outerBodyPick?.sheets || 0) + (outerTutupPick?.sheets || 0);
+
+    const bodyFitInfo = outerBodyPick
+      ? `${outerBodyPick.fit}-up (${outerBodyPick.isUtuh ? 'Utuh' : 'Sambung'})`
+      : '-';
+    const tutupFitInfo = outerTutupPick
+      ? `${outerTutupPick.fit}-up (${outerTutupPick.isUtuh ? 'Utuh' : 'Sambung'})`
+      : '-';
 
     printComparisons.push({
-      label: 'Digital',
-      detail: `[${totalDigitalClicks} klik A3+]`,
-      formatUkuran: `A3+ (${digitalMachine?.ukuranArea || '32 x 48'} cm)`,
-      metode: digitalMachine?.namaMesin || 'Digital A3+',
-      layoutInfo: digLayoutDesc,
-      kebutuhanLembar: `${digBody.sheets + digTutup.sheets} lembar A3+ (${totalDigitalClicks} klik cetak)`,
-      totalCost: digitalTotalOptionCost,
-      cetakCost: digitalPrintCost,
-      paperCost: 0, // Sudah sama kertas di Digital A3+
-      laminasiCost: sharedLaminasiCost,
-      laminasiLabel: sharedLaminasiLabel,
+      label: 'Tanpa Cetak',
+      detail: `[Kertas ${canonicalOuterName} — tanpa proses cetak]`,
+      formatUkuran: `Plano ${planoSizeLabel} cm (ukuran asli bahan)`,
+      metode: 'Tanpa Cetak (Kertas Dekoratif)',
+      layoutInfo:
+        hasOuterBody && hasOuterTutup
+          ? `Body ${bodyFitInfo}, Tutup ${tutupFitInfo}`
+          : hasOuterBody
+          ? `Body ${bodyFitInfo}`
+          : `Tutup ${tutupFitInfo}`,
+      kebutuhanLembar: `${totalSheets} lembar plano ${planoSizeLabel} cm`,
+      totalCost: totalPaperOnlyCost,
+      cetakCost: 0,
+      paperCost: totalPaperOnlyCost,
+      laminasiCost: 0,
+      laminasiLabel: '',
       isValid: true,
-      isRecommended: false,
-      bodySheetLine: hasOuterBody
-        ? `Lapisan body : ${canonicalOuterName}_${digBody.sheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (digital) ${digBody.status}`
+      isRecommended: true,
+      bodySheetLine: hasOuterBody && outerBodyPick
+        ? `Lapisan body : ${canonicalOuterName}_${outerBodyPick.sheets} lbr_${outerBodyPick.item.ukuranPlano} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (1 plano muat ${outerBodyPick.fit} pcs) ${outerBodyPick.isUtuh ? '(Utuh)' : '(Sambung)'}`
         : 'Lapisan body : Tidak menggunakan lapisan luar body',
-      tutupSheetLine: hasOuterTutup
-        ? `Lapisan tutup : ${canonicalOuterName}_${digTutup.sheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (digital) ${digTutup.status}`
+      tutupSheetLine: hasOuterTutup && outerTutupPick
+        ? `Lapisan tutup : ${canonicalOuterName}_${outerTutupPick.sheets} lbr_${outerTutupPick.item.ukuranPlano} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (1 plano muat ${outerTutupPick.fit} pcs) ${outerTutupPick.isUtuh ? '(Utuh)' : '(Sambung)'}`
         : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
     });
-  }
 
-  // Candidates 2..N: Offset Machines (Mesin 52, Mesin 58, etc.) evaluated across all available plano sizes of the chosen material
-  const planoPaperCandidates = [...outerBodyVariants, ...outerTutupVariants].filter(
-    (p) => parseRupiahNumber(p.hargaLembar) > 0
-  );
-  // Deduplicate plano sizes
-  const uniquePlanoCandidates: MaterialItem[] = [];
-  const seenPlanos = new Set<string>();
-  for (const p of planoPaperCandidates) {
-    const k = `${p.ukuranPlano}-${p.hargaLembar}`;
-    if (!seenPlanos.has(k)) {
-      seenPlanos.add(k);
-      uniquePlanoCandidates.push(p);
+    // Override: Bahan non-AP150 tidak memerlukan laminasi
+    sharedLaminasiCost = 0;
+    sharedLaminasiLabel = '';
+  } else {
+    // =====================================================================
+    // BAHAN AP 150 gr: Cetak Digital + Offset (bandingkan, pilih termurah)
+    // Khusus model Buka Tutup (Terpisah/Full): evaluasi Utuh, Sambungan 3, Sambungan 5
+    // =====================================================================
+
+    /**
+     * Apakah model ini termasuk Buka Tutup (Terpisah atau Full)
+     * Jika ya, logika sambungan 3 dan 5 diaktifkan.
+     */
+    const isBukaTutupModel =
+      model?.id === 'rumus-1' || model?.id === 'rumus-7' ||
+      (model?.modelBox || '').toLowerCase().includes('buka tutup');
+
+    /**
+     * -----------------------------------------------------------------------
+     * RUMUS SAMBUNGAN KHUSUS MODEL BUKA TUTUP PISAH (dari gambar referensi)
+     * -----------------------------------------------------------------------
+     * Sambungan 3 – Pemecahan 3 bagian:
+     *   Lapisan Luar Tutup : [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2)
+     *   Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt]   & [T]   (×2)
+     *   Lapisan Luar Body  : [P]     | [L+T+4]       & [T+4] (×2)
+     *   Lapisan Dalam Body : [P]     | [L+T]         & [T]   (×2)
+     *
+     * Sambungan 5 – Pemecahan 5 bagian (fallback jika sambungan 3 tidak muat):
+     *   Lapisan Luar Tutup : [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2) & [P] (×2)
+     *   Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt]   & [T]   (×2) & [P] (×2)
+     *   Lapisan Luar Body  : [P]     | [L+T+4]       & [T+4] (×2) & [P+4] (×2)
+     *   Lapisan Dalam Body : [P]     | [L+T]         & [T]   (×2) & [P]   (×2)
+     * -----------------------------------------------------------------------
+     */
+
+    /** Dimensi potongan sambungan untuk model Buka Tutup */
+    interface SambunganPieceSet {
+      /** Bagian-bagian potongan. Setiap elemen = [panjang, lebar] dalam cm */
+      pieces: Array<{ p: number; l: number; qty: number; label: string }>;
+      /** Jumlah total lembar yang dibutuhkan dari setiap potongan dikalikan qty */
+      totalSheets: number;
+      /** Rincian teks sambungan */
+      parts: string[];
     }
-  }
-  if (uniquePlanoCandidates.length === 0 && databases.kertasStdItems.length > 0) {
-    const fallbackStd = databases.kertasStdItems.filter(
-      (k) => parseRupiahNumber(k.hargaLembar) > 0
-    );
-    uniquePlanoCandidates.push(...fallbackStd);
-  }
 
-  databases.offsetItems.forEach((offMachine) => {
-    const mDim = parseDimensions(offMachine.ukuranAreaCetak);
-    const mMaxW = Math.max(mDim.w, mDim.h);
-    const mMinH = Math.min(mDim.w, mDim.h);
-    const biayaPerPage = parseRupiahNumber(offMachine.biayaCetak) || 500000;
+    /**
+     * Hitung dimensi potongan sambungan untuk satu komponen (body atau tutup)
+     * sesuai rumus referensi.
+     */
+    const buildSambunganPieces = (
+      komponen: 'body' | 'tutup',
+      metode: 'sambungan-3' | 'sambungan-5',
+      qty: number
+    ): SambunganPieceSet => {
+      // Tentukan dimensi dasar sesuai komponen
+      const baseP = komponen === 'tutup' ? P + 0.6 : P;
+      const baseL = komponen === 'tutup' ? L + 0.6 + Tt : L;
+      const sisiT = T;
 
-    // Check if pieces fit inside machine max print area (or split into 2 plates)
-    const bodyFitsSingle =
-      Math.max(cutLuarBody.p, cutLuarBody.l) <= mMaxW &&
-      Math.min(cutLuarBody.p, cutLuarBody.l) <= mMinH;
-    const tutupFitsSingle =
-      Math.max(cutLuarTutup.p, cutLuarTutup.l) <= mMaxW &&
-      Math.min(cutLuarTutup.p, cutLuarTutup.l) <= mMinH;
+      if (metode === 'sambungan-3') {
+        // 3 potongan: [baseP × (baseL+4)], [baseP × (sisiT+4)] ×2  (Luar)
+        // atau       [baseP × baseL],     [baseP × sisiT]     ×2  (Dalam)
+        // Catatan: +4 cm adalah margin lapisan luar
+        const pot1P = baseP;
+        const pot1L_luar = baseL + 4;
+        const pot1L_dalam = baseL;
+        const pot2P = baseP;
+        const pot2L_luar = sisiT + 4; // ×2
+        const pot2L_dalam = sisiT;    // ×2
 
-    // How many pieces fit per machine plate (N-up on machine)
-    const machineFitBody = Math.max(
-      1,
-      calcPlanoFit(mMaxW, mMinH, cutLuarBody.p, cutLuarBody.l)
-    );
-    const machineFitTutup = Math.max(
-      1,
-      calcPlanoFit(mMaxW, mMinH, cutLuarTutup.p, cutLuarTutup.l)
-    );
+        const sheets1 = Math.ceil(qty / 1);
+        const sheets2 = Math.ceil(qty / 1);
 
-    const bodyPages = hasOuterBody ? (bodyFitsSingle ? 1 : 2) : 0;
-    const tutupPages = hasOuterTutup ? (tutupFitsSingle ? 1 : 2) : 0;
-    const totalPages = Math.max(1, bodyPages + tutupPages);
+        const luarParts = [
+          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_luar.toFixed(1)} cm (${qty} lbr)`,
+          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
+        ];
+        const dalamParts = [
+          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_dalam.toFixed(1)} cm (${qty} lbr)`,
+          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_dalam.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
+        ];
 
-    // Evaluate all available plano sizes for this material and pick the cheapest plano for this offset machine
-    let bestPlanoOption: {
-      planoItem: MaterialItem;
-      planoFitBody: number;
-      planoFitTutup: number;
-      rawPlanoBody: number;
-      rawPlanoTutup: number;
-      totalPlanoPotong: number;
-      paperOffsetCost: number;
-    } | null = null;
-
-    for (const planoCand of uniquePlanoCandidates) {
-      const pDim = parseDimensions(planoCand.ukuranPlano);
-      const pPrice = parseRupiahNumber(planoCand.hargaLembar) || 2900;
-      const pFitBody = Math.max(
-        1,
-        calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarBody.p, cutLuarBody.l)
-      );
-      const pFitTutup = Math.max(
-        1,
-        calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarTutup.p, cutLuarTutup.l)
-      );
-
-      const rBody = hasOuterBody ? Math.ceil(safeQty / pFitBody) : 0;
-      const rTutup = hasOuterTutup ? Math.ceil(safeQty / pFitTutup) : 0;
-      const basePlano = Math.max(safeQty, rBody + rTutup);
-      const inschietSheets = totalPages === 2 ? 75 : totalPages * 25 + 50;
-      const totalPlanoPotong = basePlano + inschietSheets;
-
-      const paperOffsetCost =
-        totalPages === 3
-          ? Math.round((totalPlanoPotong / 275) * 220800 * (pPrice / 2900))
-          : Math.round((totalPlanoPotong / 225) * 339000 * (pPrice / 2900));
-
-      if (!bestPlanoOption || paperOffsetCost < bestPlanoOption.paperOffsetCost) {
-        bestPlanoOption = {
-          planoItem: planoCand,
-          planoFitBody: pFitBody,
-          planoFitTutup: pFitTutup,
-          rawPlanoBody: rBody,
-          rawPlanoTutup: rTutup,
-          totalPlanoPotong,
-          paperOffsetCost,
+        // Total lembar = 1×qty + 2×qty = 3×qty
+        return {
+          pieces: [
+            { p: pot1P, l: pot1L_luar, qty: sheets1, label: `Pot.1 (Tengah)` },
+            { p: pot2P, l: pot2L_luar, qty: sheets2 * 2, label: `Pot.2+3 (Samping ×2)` },
+          ],
+          totalSheets: sheets1 + sheets2 * 2,
+          parts: luarParts,
         };
+      } else {
+        // sambungan-5: 5 potongan
+        // Potongan luar: [baseP × (baseL+4)], [baseP × (sisiT+4)] ×2, [baseP × (baseP+4)] ×2
+        // Potongan dalam: tidak dihitung terpisah (digunakan oleh lapisan dalam)
+        const pot1P = baseP;
+        const pot1L_luar = baseL + 4;
+        const pot2P = baseP;
+        const pot2L_luar = sisiT + 4;   // ×2
+        // Potongan sisi pendek
+        const sisiPendekP_luar = komponen === 'tutup' ? P + 4 : P + 4;
+        const sisiPendekL_luar = komponen === 'tutup' ? P + 4 : P + 4;
+
+        const sheets1 = Math.ceil(qty / 1);
+        const sheets2 = Math.ceil(qty / 1);
+        const sheets3 = Math.ceil(qty / 1);
+
+        const luarParts = [
+          `Pot 1: ${pot1P.toFixed(1)} × ${pot1L_luar.toFixed(1)} cm (${qty} lbr)`,
+          `Pot 2+3: ${pot2P.toFixed(1)} × ${pot2L_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
+          `Pot 4+5: ${sisiPendekP_luar.toFixed(1)} × ${sisiPendekL_luar.toFixed(1)} cm (×2 = ${qty * 2} lbr)`,
+        ];
+
+        return {
+          pieces: [
+            { p: pot1P, l: pot1L_luar, qty: sheets1, label: 'Pot.1 (Muka)' },
+            { p: pot2P, l: pot2L_luar, qty: sheets2 * 2, label: 'Pot.2+3 (Sisi panjang ×2)' },
+            { p: sisiPendekP_luar, l: sisiPendekL_luar, qty: sheets3 * 2, label: 'Pot.4+5 (Sisi pendek ×2)' },
+          ],
+          totalSheets: sheets1 + sheets2 * 2 + sheets3 * 2,
+          parts: luarParts,
+        };
+      }
+    };
+
+    /**
+     * Hitung biaya kertas plano untuk potongan sambungan dari satu plano kandidat.
+     * Setiap potongan dihitung independen (fit per plano × lembar yang dibutuhkan).
+     */
+    const calcSambunganPaperCost = (
+      pieces: Array<{ p: number; l: number; qty: number }>,
+      planoItem: MaterialItem
+    ): number => {
+      const pDim = parseDimensions(planoItem.ukuranPlano);
+      const pPrice = parseRupiahNumber(planoItem.hargaLembar) || 2900;
+      let totalCostLocal = 0;
+      for (const piece of pieces) {
+        const fit = Math.max(1, calcPlanoFit(pDim.w, pDim.h, piece.p, piece.l));
+        const sheets = Math.ceil(piece.qty / fit);
+        totalCostLocal += sheets * pPrice;
+      }
+      return Math.round(totalCostLocal);
+    };
+
+    /**
+     * Periksa apakah SEMUA potongan sambungan muat di area cetak mesin
+     * (untuk validasi teknis)
+     */
+    const allPiecesFitMachine = (
+      pieces: Array<{ p: number; l: number }>,
+      mMaxW: number,
+      mMinH: number
+    ): boolean =>
+      pieces.every(
+        (pc) =>
+          Math.max(pc.p, pc.l) <= mMaxW && Math.min(pc.p, pc.l) <= mMinH
+      );
+
+    // ---- Data mesin Digital ----
+    const digitalMachine = databases.digitalItems[0];
+    const digitalRawDim = parseDimensions(digitalMachine?.ukuranArea || '32 x 48');
+    const digMaxW = Math.max(digitalRawDim.w, digitalRawDim.h) - 0.5; // 47.5 cm
+    const digMaxH = Math.min(digitalRawDim.w, digitalRawDim.h) - 0.5; // 31.5 cm
+    const digitalRate = parseRupiahNumber(digitalMachine?.hargaCetak || 'Rp 2.000');
+
+
+    // =====================================================================
+    // DIGITAL: Evaluasi Utuh vs Sambungan 3 vs Sambungan 5 (Model Buka Tutup)
+    // Ketentuan:
+    // 1. Jika Digital UTUH (semua lapisan luar muat utuh di A3+):
+    //    - Perhitungan sambungan 3 dan 5 TIDAK BERFUNGSI (tidak dihitung)
+    //    - Kata/opsi "utuh" pada digital tidak perlu ditampilkan (cukup label "Digital")
+    // 2. Jika Digital TIDAK UTUH:
+    //    - Opsi utuh pada digital TIDAK PERLU DITAMPILKAN
+    //    - Rekomendasi sambungan 3 dan 5 AKTIF (dievaluasi dan ditampilkan jika muat)
+    // =====================================================================
+    if (isBukaTutupModel && (hasOuterBody || hasOuterTutup)) {
+      // Periksa apakah lembaran luar muat UTUH di area cetak Digital A3+ (fit >= 1 tanpa sambung)
+      const bodyUtuhFit = hasOuterBody
+        ? calcPlanoFit(digMaxW, digMaxH, cutLuarBody.p, cutLuarBody.l)
+        : 1;
+      const tutupUtuhFit = hasOuterTutup
+        ? calcPlanoFit(digMaxW, digMaxH, cutLuarTutup.p, cutLuarTutup.l)
+        : 1;
+
+      const isDigitalUtuh =
+        (!hasOuterBody || bodyUtuhFit >= 1) &&
+        (!hasOuterTutup || tutupUtuhFit >= 1);
+
+      if (isDigitalUtuh) {
+        // -----------------------------------------------------------------
+        // KONDISI 1: DIGITAL UTUH
+        // - Sambungan 3 dan 5 TIDAK BERFUNGSI (tidak dihitung / tidak ditampilkan)
+        // - Tampilkan Digital standar tanpa embel-embel "utuh"
+        // -----------------------------------------------------------------
+        const digBodySheets = hasOuterBody ? Math.ceil(safeQty / bodyUtuhFit) : 0;
+        const digTutupSheets = hasOuterTutup ? Math.ceil(safeQty / tutupUtuhFit) : 0;
+        const totalSheets = digBodySheets + digTutupSheets;
+        const totalClicks = totalSheets;
+        const printCost = totalClicks * digitalRate;
+        const totalCost = printCost + sharedLaminasiCost;
+
+        const layoutDesc =
+          hasOuterBody && hasOuterTutup
+            ? `Body ${bodyUtuhFit}-up, Tutup ${tutupUtuhFit}-up`
+            : `${Math.max(bodyUtuhFit, tutupUtuhFit)}-up`;
+
+        printComparisons.push({
+          label: 'Digital',
+          detail: `[${totalClicks} klik A3+]`,
+          formatUkuran: `A3+ (${digitalMachine?.ukuranArea || '32 x 48'} cm)`,
+          metode: digitalMachine?.namaMesin || 'Digital A3+',
+          layoutInfo: layoutDesc,
+          kebutuhanLembar: `${totalSheets} lembar A3+ (${totalClicks} klik cetak)`,
+          totalCost,
+          cetakCost: printCost,
+          paperCost: 0,
+          laminasiCost: sharedLaminasiCost,
+          laminasiLabel: sharedLaminasiLabel,
+          isValid: true,
+          isRecommended: false,
+          bodySheetLine: hasOuterBody
+            ? `Lapisan body : ${canonicalOuterName}_${digBodySheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm`
+            : 'Lapisan body : Tidak menggunakan lapisan luar body',
+          tutupSheetLine: hasOuterTutup
+            ? `Lapisan tutup : ${canonicalOuterName}_${digTutupSheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm`
+            : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+          sambunganMethod: 'utuh',
+          sambunganParts: [],
+        });
+      } else {
+        // -----------------------------------------------------------------
+        // KONDISI 2: DIGITAL TIDAK UTUH
+        // - Digital Utuh TIDAK PERLU DITAMPILKAN
+        // - Rekomendasi sambungan pada 3 - 5 AKTIF
+        // -----------------------------------------------------------------
+        type DigitalSambunganResult = {
+          method: 'sambungan-3' | 'sambungan-5';
+          isValid: boolean;
+          totalClicks: number;
+          totalSheets: number;
+          printCost: number;
+          totalCost: number;
+          layoutDesc: string;
+          bodyLine: string;
+          tutupLine: string;
+          parts: string[];
+        };
+
+        const evalDigitalSambungan = (
+          method: 'sambungan-3' | 'sambungan-5'
+        ): DigitalSambunganResult => {
+          const bodyPieces = hasOuterBody
+            ? buildSambunganPieces('body', method, safeQty)
+            : null;
+          const tutupPieces = hasOuterTutup
+            ? buildSambunganPieces('tutup', method, safeQty)
+            : null;
+
+          // Validasi teknis: SEMUA potongan sambungan harus muat di Digital A3+ (fit >= 1)
+          const allBodyFit =
+            !bodyPieces ||
+            bodyPieces.pieces.every(
+              (pc) => calcPlanoFit(digMaxW, digMaxH, pc.p, pc.l) >= 1
+            );
+          const allTutupFit =
+            !tutupPieces ||
+            tutupPieces.pieces.every(
+              (pc) => calcPlanoFit(digMaxW, digMaxH, pc.p, pc.l) >= 1
+            );
+          const isValid = allBodyFit && allTutupFit;
+
+          // Hitung klik untuk tiap potongan yang muat
+          const calcPieceClicks = (pc: { p: number; l: number; qty: number }) => {
+            const fit = Math.max(1, calcPlanoFit(digMaxW, digMaxH, pc.p, pc.l));
+            return Math.ceil(pc.qty / fit); // 1 lembar A3+ = 1 klik
+          };
+
+          const bodyClicks =
+            bodyPieces && isValid
+              ? bodyPieces.pieces.reduce(
+                  (sum, pc) => sum + calcPieceClicks(pc),
+                  0
+                )
+              : 0;
+          const tutupClicks =
+            tutupPieces && isValid
+              ? tutupPieces.pieces.reduce(
+                  (sum, pc) => sum + calcPieceClicks(pc),
+                  0
+                )
+              : 0;
+
+          const totalClicks = bodyClicks + tutupClicks;
+          const bodySheets = bodyClicks;
+          const tutupSheets = tutupClicks;
+
+          const printCost = totalClicks * digitalRate;
+          const totalCost = printCost + sharedLaminasiCost;
+
+          const nBagian = method === 'sambungan-3' ? 3 : 5;
+          const layoutDesc = `Sambungan ${nBagian} bagian — Body ${bodySheets} lbr, Tutup ${tutupSheets} lbr`;
+
+          const allParts = [
+            ...(bodyPieces?.parts.map((p) => `Body: ${p}`) || []),
+            ...(tutupPieces?.parts.map((p) => `Tutup: ${p}`) || []),
+          ];
+
+          const bodyLineDetail = bodyPieces
+            ? bodyPieces.pieces
+                .map(
+                  (pc) =>
+                    `${pc.p.toFixed(1)}×${pc.l.toFixed(1)} cm (${pc.qty} lbr)`
+                )
+                .join(' + ')
+            : '-';
+          const tutupLineDetail = tutupPieces
+            ? tutupPieces.pieces
+                .map(
+                  (pc) =>
+                    `${pc.p.toFixed(1)}×${pc.l.toFixed(1)} cm (${pc.qty} lbr)`
+                )
+                .join(' + ')
+            : '-';
+
+          return {
+            method,
+            isValid,
+            totalClicks,
+            totalSheets: bodySheets + tutupSheets,
+            printCost,
+            totalCost,
+            layoutDesc,
+            bodyLine: hasOuterBody
+              ? `Lapisan body : ${canonicalOuterName}_Sambungan ${nBagian}_A3+_${bodyLineDetail}`
+              : 'Lapisan body : Tidak menggunakan lapisan luar body',
+            tutupLine: hasOuterTutup
+              ? `Lapisan tutup : ${canonicalOuterName}_Sambungan ${nBagian}_A3+_${tutupLineDetail}`
+              : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+            parts: allParts,
+          };
+        };
+
+        const sambunganResults = (['sambungan-3', 'sambungan-5'] as const)
+          .map(evalDigitalSambungan)
+          .filter((r) => r.isValid);
+
+        // Tambahkan semua opsi sambungan digital yang valid ke printComparisons
+        sambunganResults.forEach((res) => {
+          const methodLabel =
+            res.method === 'sambungan-3' ? 'Sambungan 3' : 'Sambungan 5';
+          printComparisons.push({
+            label: `Digital (${methodLabel})`,
+            detail: `[${res.totalClicks} klik A3+ — ${methodLabel} bagian]`,
+            formatUkuran: `A3+ (${digitalMachine?.ukuranArea || '32 x 48'} cm)`,
+            metode: `Digital A3+ — ${methodLabel}`,
+            layoutInfo: res.layoutDesc,
+            kebutuhanLembar: `${res.totalSheets} lembar A3+ (${res.totalClicks} klik cetak)`,
+            totalCost: res.totalCost,
+            cetakCost: res.printCost,
+            paperCost: 0,
+            laminasiCost: sharedLaminasiCost,
+            laminasiLabel: sharedLaminasiLabel,
+            isValid: true,
+            isRecommended: false,
+            bodySheetLine: res.bodyLine,
+            tutupSheetLine: res.tutupLine,
+            sambunganMethod: res.method,
+            sambunganParts: res.parts,
+          });
+        });
+      }
+    } else {
+      // Model non-Buka Tutup: logika digital lama (utuh/sambung sederhana)
+      const calcDigitalPiece = (pieceW: number, pieceH: number) => {
+        const maxSide = Math.max(pieceW, pieceH);
+        const minSide = Math.min(pieceW, pieceH);
+        const fit = calcPlanoFit(digMaxW, digMaxH, pieceW, pieceH);
+        if (fit >= 1) {
+          const sheets = Math.ceil(safeQty / fit);
+          return { fit, sheets, clicks: sheets, status: 'utuh', isValid: true };
+        }
+        if (maxSide <= digMaxW + 15) {
+          const overflow = Math.max(0, Math.ceil(minSide - digMaxH + 1.5));
+          const sambungCm = Math.max(3, overflow);
+          const extraClicks = Math.ceil(safeQty * (sambungCm / 12.5));
+          const totalClicks = safeQty + extraClicks;
+          const areaRatio = (maxSide * minSide) / (digMaxW * digMaxH * 1.152);
+          const effectiveSheets = Math.ceil(safeQty * areaRatio);
+          return { fit: 1, sheets: effectiveSheets, clicks: totalClicks, status: `sambung ${sambungCm}`, isValid: true };
+        }
+        return { fit: 0, sheets: 0, clicks: 0, status: 'tidak muat', isValid: false };
+      };
+
+      const digBody = hasOuterBody
+        ? calcDigitalPiece(cutLuarBody.p, cutLuarBody.l)
+        : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: true };
+      const digTutup = hasOuterTutup
+        ? calcDigitalPiece(cutLuarTutup.p, cutLuarTutup.l)
+        : { fit: 1, sheets: 0, clicks: 0, status: 'utuh', isValid: true };
+
+      if (digBody.isValid && digTutup.isValid) {
+        const totalDigitalClicks = digBody.clicks + digTutup.clicks;
+        const digitalPrintCost = totalDigitalClicks * digitalRate;
+        const digitalTotalOptionCost = digitalPrintCost + sharedLaminasiCost;
+        const digLayoutDesc =
+          hasOuterBody && hasOuterTutup
+            ? `Body ${digBody.fit}-up (${digBody.status}), Tutup ${digTutup.fit}-up (${digTutup.status})`
+            : `${Math.max(digBody.fit, digTutup.fit)}-up`;
+        printComparisons.push({
+          label: 'Digital',
+          detail: `[${totalDigitalClicks} klik A3+]`,
+          formatUkuran: `A3+ (${digitalMachine?.ukuranArea || '32 x 48'} cm)`,
+          metode: digitalMachine?.namaMesin || 'Digital A3+',
+          layoutInfo: digLayoutDesc,
+          kebutuhanLembar: `${digBody.sheets + digTutup.sheets} lembar A3+ (${totalDigitalClicks} klik cetak)`,
+          totalCost: digitalTotalOptionCost,
+          cetakCost: digitalPrintCost,
+          paperCost: 0,
+          laminasiCost: sharedLaminasiCost,
+          laminasiLabel: sharedLaminasiLabel,
+          isValid: true,
+          isRecommended: false,
+          bodySheetLine: hasOuterBody
+            ? `Lapisan body : ${canonicalOuterName}_${digBody.sheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (digital) ${digBody.status}`
+            : 'Lapisan body : Tidak menggunakan lapisan luar body',
+          tutupSheetLine: hasOuterTutup
+            ? `Lapisan tutup : ${canonicalOuterName}_${digTutup.sheets} lbr A3+_${digMaxW.toFixed(1)} x ${digMaxH.toFixed(1)} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (digital) ${digTutup.status}`
+            : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+        });
       }
     }
 
-    if (bestPlanoOption) {
-      // Also include Lebih Druk if total print impressions > 2000
-      const lebihDrukRate = offMachine.lebihDruk.includes('30') ? 30 : 25;
-      const extraDruk =
-        safeQty > 2000 ? (safeQty - 2000) * lebihDrukRate * totalPages : 0;
-      const cetakOffsetCost = totalPages * biayaPerPage + extraDruk;
-      const offsetTotalCost =
-        cetakOffsetCost + sharedLaminasiCost + bestPlanoOption.paperOffsetCost;
-
-      const chosenPlanoSize = bestPlanoOption.planoItem.ukuranPlano;
-
-      printComparisons.push({
-        label: offMachine.mesinCetak,
-        detail: `[${totalPages} Page (${bestPlanoOption.totalPlanoPotong} lembar plano potong)]`,
-        formatUkuran: `Plano ${chosenPlanoSize} cm (Area Mesin ${offMachine.ukuranAreaCetak} cm)`,
-        metode: `Offset ${offMachine.mesinCetak}`,
-        layoutInfo: `Body ${bestPlanoOption.planoFitBody}-up/plano (${machineFitBody}-up/plat), Tutup ${bestPlanoOption.planoFitTutup}-up/plano (${machineFitTutup}-up/plat)`,
-        kebutuhanLembar: `${bestPlanoOption.totalPlanoPotong} lembar plano potong (${totalPages} Page)`,
-        totalCost: offsetTotalCost,
-        cetakCost: cetakOffsetCost,
-        paperCost: bestPlanoOption.paperOffsetCost,
-        laminasiCost: sharedLaminasiCost,
-        laminasiLabel: sharedLaminasiLabel,
-        isValid: true,
-        isRecommended: false,
-        bodySheetLine: hasOuterBody
-          ? `Lapisan body : ${canonicalOuterName}_${bestPlanoOption.rawPlanoBody} lbr plano_${chosenPlanoSize} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} - 1 plano muat ${bestPlanoOption.planoFitBody} pcs)`
-          : 'Lapisan body : Tidak menggunakan lapisan luar body',
-        tutupSheetLine: hasOuterTutup
-          ? `Lapisan tutup : ${canonicalOuterName}_${bestPlanoOption.rawPlanoTutup} lbr plano_${chosenPlanoSize} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} - 1 plano muat ${bestPlanoOption.planoFitTutup} pcs)`
-          : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
-      });
+    // Candidates: Offset Machines – dievaluasi untuk semua ukuran plano yang tersedia
+    const planoPaperCandidates = [...outerBodyVariants, ...outerTutupVariants].filter(
+      (p) => parseRupiahNumber(p.hargaLembar) > 0
+    );
+    // Deduplicate plano sizes
+    const uniquePlanoCandidates: MaterialItem[] = [];
+    const seenPlanos = new Set<string>();
+    for (const p of planoPaperCandidates) {
+      const k = `${p.ukuranPlano}-${p.hargaLembar}`;
+      if (!seenPlanos.has(k)) {
+        seenPlanos.add(k);
+        uniquePlanoCandidates.push(p);
+      }
     }
-  });
+    if (uniquePlanoCandidates.length === 0 && databases.kertasStdItems.length > 0) {
+      const fallbackStd = databases.kertasStdItems.filter(
+        (k) => parseRupiahNumber(k.hargaLembar) > 0
+      );
+      uniquePlanoCandidates.push(...fallbackStd);
+    }
+
+    databases.offsetItems.forEach((offMachine) => {
+      const mDim = parseDimensions(offMachine.ukuranAreaCetak);
+      const mMaxW = Math.max(mDim.w, mDim.h);
+      const mMinH = Math.min(mDim.w, mDim.h);
+      const biayaPerPage = parseRupiahNumber(offMachine.biayaCetak) || 500000;
+      const lebihDrukRate = offMachine.lebihDruk.includes('30') ? 30 : 25;
+
+      // -----------------------------------------------------------------------
+      // Untuk model Buka Tutup: evaluasi Utuh, Sambungan 3, Sambungan 5
+      // -----------------------------------------------------------------------
+      if (isBukaTutupModel && (hasOuterBody || hasOuterTutup)) {
+        type OffsetMethodResult = {
+          method: 'utuh' | 'sambungan-3' | 'sambungan-5';
+          isValid: boolean;
+          totalPages: number;
+          totalPlanoPotong: number;
+          paperCost: number;
+          cetakCost: number;
+          totalCost: number;
+          layoutDesc: string;
+          kebutuhanDesc: string;
+          bodyLine: string;
+          tutupLine: string;
+          parts: string[];
+          planoSize: string;
+        };
+
+        const evalOffsetMethod = (method: 'utuh' | 'sambungan-3' | 'sambungan-5'): OffsetMethodResult => {
+          if (method === 'utuh') {
+            // Metode utuh: validasi per komponen apakah muat di mesin
+            const bodyFitsSingle =
+              Math.max(cutLuarBody.p, cutLuarBody.l) <= mMaxW &&
+              Math.min(cutLuarBody.p, cutLuarBody.l) <= mMinH;
+            const tutupFitsSingle =
+              Math.max(cutLuarTutup.p, cutLuarTutup.l) <= mMaxW &&
+              Math.min(cutLuarTutup.p, cutLuarTutup.l) <= mMinH;
+
+            // Jika salah satu tidak muat → tidak valid untuk metode utuh di mesin ini
+            const isValidLocal =
+              (!hasOuterBody || bodyFitsSingle) && (!hasOuterTutup || tutupFitsSingle);
+
+            const machineFitBody = Math.max(1, calcPlanoFit(mMaxW, mMinH, cutLuarBody.p, cutLuarBody.l));
+            const machineFitTutup = Math.max(1, calcPlanoFit(mMaxW, mMinH, cutLuarTutup.p, cutLuarTutup.l));
+
+            const bodyPages = hasOuterBody ? (bodyFitsSingle ? 1 : 2) : 0;
+            const tutupPages = hasOuterTutup ? (tutupFitsSingle ? 1 : 2) : 0;
+            const totalPages = Math.max(1, bodyPages + tutupPages);
+
+            // Pilih plano terbaik
+            let bestOpt: {
+              planoItem: MaterialItem;
+              pFitBody: number; pFitTutup: number;
+              rBody: number; rTutup: number;
+              totalPlanoPotong: number; paperOffsetCost: number;
+            } | null = null;
+
+            for (const planoCand of uniquePlanoCandidates) {
+              const pDim = parseDimensions(planoCand.ukuranPlano);
+              const pPrice = parseRupiahNumber(planoCand.hargaLembar) || 2900;
+              const pFitBody = Math.max(1, calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarBody.p, cutLuarBody.l));
+              const pFitTutup = Math.max(1, calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarTutup.p, cutLuarTutup.l));
+              const rBody = hasOuterBody ? Math.ceil(safeQty / pFitBody) : 0;
+              const rTutup = hasOuterTutup ? Math.ceil(safeQty / pFitTutup) : 0;
+              const basePlano = Math.max(safeQty, rBody + rTutup);
+              const inschiet = totalPages === 2 ? 75 : totalPages * 25 + 50;
+              const totalPlanoPotong = basePlano + inschiet;
+              const paperOffsetCost = totalPages === 3
+                ? Math.round((totalPlanoPotong / 275) * 220800 * (pPrice / 2900))
+                : Math.round((totalPlanoPotong / 225) * 339000 * (pPrice / 2900));
+              if (!bestOpt || paperOffsetCost < bestOpt.paperOffsetCost) {
+                bestOpt = { planoItem: planoCand, pFitBody, pFitTutup, rBody, rTutup, totalPlanoPotong, paperOffsetCost };
+              }
+            }
+
+            if (!bestOpt) return { method, isValid: false, totalPages: 0, totalPlanoPotong: 0, paperCost: 0, cetakCost: 0, totalCost: 0, layoutDesc: '', kebutuhanDesc: '', bodyLine: '', tutupLine: '', parts: [], planoSize: '' };
+
+            const extraDruk = safeQty > 2000 ? (safeQty - 2000) * lebihDrukRate * totalPages : 0;
+            const cetakCostLocal = totalPages * biayaPerPage + extraDruk;
+            const totalCostLocal = cetakCostLocal + sharedLaminasiCost + bestOpt.paperOffsetCost;
+
+            const planoSize = bestOpt.planoItem.ukuranPlano;
+            return {
+              method,
+              isValid: isValidLocal,
+              totalPages,
+              totalPlanoPotong: bestOpt.totalPlanoPotong,
+              paperCost: bestOpt.paperOffsetCost,
+              cetakCost: cetakCostLocal,
+              totalCost: totalCostLocal,
+              layoutDesc: `Utuh — Body ${bestOpt.pFitBody}-up/plano (${machineFitBody}-up/plat), Tutup ${bestOpt.pFitTutup}-up/plano (${machineFitTutup}-up/plat)`,
+              kebutuhanDesc: `${bestOpt.totalPlanoPotong} lembar plano potong (${totalPages} Page, Utuh)`,
+              bodyLine: hasOuterBody
+                ? `Lapisan body : ${canonicalOuterName}_${bestOpt.rBody} lbr plano_${planoSize} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} utuh — 1 plano muat ${bestOpt.pFitBody} pcs)`
+                : 'Lapisan body : Tidak menggunakan lapisan luar body',
+              tutupLine: hasOuterTutup
+                ? `Lapisan tutup : ${canonicalOuterName}_${bestOpt.rTutup} lbr plano_${planoSize} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} utuh — 1 plano muat ${bestOpt.pFitTutup} pcs)`
+                : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+              parts: [],
+              planoSize,
+            };
+          } else {
+            // Sambungan 3 atau 5
+            const nBagian = method === 'sambungan-3' ? 3 : 5;
+            const bodyPieces = hasOuterBody ? buildSambunganPieces('body', method, safeQty) : null;
+            const tutupPieces = hasOuterTutup ? buildSambunganPieces('tutup', method, safeQty) : null;
+
+            // Validasi: semua potongan harus muat di area mesin offset
+            const allBodyFit = !bodyPieces || allPiecesFitMachine(bodyPieces.pieces, mMaxW, mMinH);
+            const allTutupFit = !tutupPieces || allPiecesFitMachine(tutupPieces.pieces, mMaxW, mMinH);
+            const isValidLocal = allBodyFit && allTutupFit;
+
+            // Hitung page: setiap potongan unik = 1 page
+            const bodyPageCount = bodyPieces ? bodyPieces.pieces.length : 0;
+            const tutupPageCount = tutupPieces ? tutupPieces.pieces.length : 0;
+            const totalPages = Math.max(1, bodyPageCount + tutupPageCount);
+
+            // Pilih plano terbaik: hitung biaya kertas untuk semua potongan sambungan
+            let bestOpt2: {
+              planoItem: MaterialItem;
+              paperCostLocal: number;
+              totalPlanoPotong: number;
+            } | null = null;
+
+            for (const planoCand of uniquePlanoCandidates) {
+              const allPieces = [
+                ...(bodyPieces?.pieces || []),
+                ...(tutupPieces?.pieces || []),
+              ];
+              const paperCostLocal = calcSambunganPaperCost(allPieces, planoCand);
+              // Estimasi total plano potong (jumlah semua lembar potongan + inschiet)
+              const totalPlanoEst = allPieces.reduce((sum, pc) => {
+                const pDim = parseDimensions(planoCand.ukuranPlano);
+                const fit = Math.max(1, calcPlanoFit(pDim.w, pDim.h, pc.p, pc.l));
+                return sum + Math.ceil(pc.qty / fit);
+              }, 0) + totalPages * 25 + 50;
+
+              if (!bestOpt2 || paperCostLocal < bestOpt2.paperCostLocal) {
+                bestOpt2 = { planoItem: planoCand, paperCostLocal, totalPlanoPotong: totalPlanoEst };
+              }
+            }
+
+            if (!bestOpt2) return { method, isValid: false, totalPages: 0, totalPlanoPotong: 0, paperCost: 0, cetakCost: 0, totalCost: 0, layoutDesc: '', kebutuhanDesc: '', bodyLine: '', tutupLine: '', parts: [], planoSize: '' };
+
+            const extraDruk = safeQty > 2000 ? (safeQty - 2000) * lebihDrukRate * totalPages : 0;
+            const cetakCostLocal = totalPages * biayaPerPage + extraDruk;
+            const totalCostLocal = cetakCostLocal + sharedLaminasiCost + bestOpt2.paperCostLocal;
+
+            const planoSize = bestOpt2.planoItem.ukuranPlano;
+
+            const bodyLineDetail = bodyPieces
+              ? bodyPieces.pieces.map((pc) => `${pc.p.toFixed(1)}×${pc.l.toFixed(1)} cm (${pc.qty} lbr)`).join(' + ')
+              : '-';
+            const tutupLineDetail = tutupPieces
+              ? tutupPieces.pieces.map((pc) => `${pc.p.toFixed(1)}×${pc.l.toFixed(1)} cm (${pc.qty} lbr)`).join(' + ')
+              : '-';
+
+            const allParts = [
+              ...(bodyPieces?.parts.map((p) => `Body: ${p}`) || []),
+              ...(tutupPieces?.parts.map((p) => `Tutup: ${p}`) || []),
+            ];
+
+            return {
+              method,
+              isValid: isValidLocal,
+              totalPages,
+              totalPlanoPotong: bestOpt2.totalPlanoPotong,
+              paperCost: bestOpt2.paperCostLocal,
+              cetakCost: cetakCostLocal,
+              totalCost: totalCostLocal,
+              layoutDesc: `Sambungan ${nBagian} — ${totalPages} page (body ${bodyPageCount} page, tutup ${tutupPageCount} page)`,
+              kebutuhanDesc: `${bestOpt2.totalPlanoPotong} lembar plano potong (${totalPages} Page, Sambungan ${nBagian})`,
+              bodyLine: hasOuterBody
+                ? `Lapisan body : ${canonicalOuterName}_Sambungan ${nBagian}_plano ${planoSize} cm_${bodyLineDetail}`
+                : 'Lapisan body : Tidak menggunakan lapisan luar body',
+              tutupLine: hasOuterTutup
+                ? `Lapisan tutup : ${canonicalOuterName}_Sambungan ${nBagian}_plano ${planoSize} cm_${tutupLineDetail}`
+                : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+              parts: allParts,
+              planoSize,
+            };
+          }
+        };
+
+        // Evaluasi metode untuk mesin Offset ini sesuai aturan Buka Tutup:
+        // Jika pada mesin offset (52 atau 58) UTUH valid, maka rekomendasi sambungan 3 dan 5 TIDAK AKTIF.
+        // Sambungan 3 dan 5 hanya aktif jika mesin offset ini TIDAK bisa mencetak secara utuh.
+        const utuhResult = evalOffsetMethod('utuh');
+        const offResults: OffsetMethodResult[] = [];
+
+        if (utuhResult.isValid) {
+          // Mesin ini bisa cetak utuh -> sambungan 3 dan 5 tidak aktif
+          offResults.push(utuhResult);
+        } else {
+          // Mesin ini tidak bisa cetak utuh -> evaluasi rekomendasi sambungan 3 dan 5
+          const sambunganResults = (['sambungan-3', 'sambungan-5'] as const)
+            .map(evalOffsetMethod)
+            .filter((r) => r.isValid);
+          offResults.push(...sambunganResults);
+        }
+
+        // Urutkan dari termurah
+        offResults.sort((a, b) => a.totalCost - b.totalCost);
+
+        // Tambahkan semua alternatif yang aktif dan valid ke printComparisons
+        offResults.forEach((res, idx) => {
+          const methodLabel = res.method === 'utuh' ? 'Utuh' : res.method === 'sambungan-3' ? 'Sambungan 3' : 'Sambungan 5';
+          const labelStr = `${offMachine.mesinCetak} (${methodLabel})`;
+          printComparisons.push({
+            label: labelStr,
+            detail: `[${res.totalPages} Page — ${methodLabel} (${res.totalPlanoPotong} lbr plano)]`,
+            formatUkuran: `Plano ${res.planoSize} cm (Area Mesin ${offMachine.ukuranAreaCetak} cm)`,
+            metode: `Offset ${offMachine.mesinCetak} — ${methodLabel}`,
+            layoutInfo: res.layoutDesc,
+            kebutuhanLembar: res.kebutuhanDesc,
+            totalCost: res.totalCost,
+            cetakCost: res.cetakCost,
+            paperCost: res.paperCost,
+            laminasiCost: sharedLaminasiCost,
+            laminasiLabel: sharedLaminasiLabel,
+            isValid: true,
+            isRecommended: false,
+            bodySheetLine: res.bodyLine,
+            tutupSheetLine: res.tutupLine,
+            sambunganMethod: res.method,
+            sambunganParts: res.parts,
+          });
+        });
+      } else {
+        // Model non-Buka Tutup: logika Offset lama
+        const bodyFitsSingle =
+          Math.max(cutLuarBody.p, cutLuarBody.l) <= mMaxW &&
+          Math.min(cutLuarBody.p, cutLuarBody.l) <= mMinH;
+        const tutupFitsSingle =
+          Math.max(cutLuarTutup.p, cutLuarTutup.l) <= mMaxW &&
+          Math.min(cutLuarTutup.p, cutLuarTutup.l) <= mMinH;
+
+        const machineFitBody = Math.max(1, calcPlanoFit(mMaxW, mMinH, cutLuarBody.p, cutLuarBody.l));
+        const machineFitTutup = Math.max(1, calcPlanoFit(mMaxW, mMinH, cutLuarTutup.p, cutLuarTutup.l));
+
+        const bodyPages = hasOuterBody ? (bodyFitsSingle ? 1 : 2) : 0;
+        const tutupPages = hasOuterTutup ? (tutupFitsSingle ? 1 : 2) : 0;
+        const totalPages = Math.max(1, bodyPages + tutupPages);
+
+        let bestPlanoOption: {
+          planoItem: MaterialItem;
+          planoFitBody: number;
+          planoFitTutup: number;
+          rawPlanoBody: number;
+          rawPlanoTutup: number;
+          totalPlanoPotong: number;
+          paperOffsetCost: number;
+        } | null = null;
+
+        for (const planoCand of uniquePlanoCandidates) {
+          const pDim = parseDimensions(planoCand.ukuranPlano);
+          const pPrice = parseRupiahNumber(planoCand.hargaLembar) || 2900;
+          const pFitBody = Math.max(1, calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarBody.p, cutLuarBody.l));
+          const pFitTutup = Math.max(1, calcPlanoFit(pDim.w || 100, pDim.h || 65, cutLuarTutup.p, cutLuarTutup.l));
+          const rBody = hasOuterBody ? Math.ceil(safeQty / pFitBody) : 0;
+          const rTutup = hasOuterTutup ? Math.ceil(safeQty / pFitTutup) : 0;
+          const basePlano = Math.max(safeQty, rBody + rTutup);
+          const inschietSheets = totalPages === 2 ? 75 : totalPages * 25 + 50;
+          const totalPlanoPotong = basePlano + inschietSheets;
+          const paperOffsetCost =
+            totalPages === 3
+              ? Math.round((totalPlanoPotong / 275) * 220800 * (pPrice / 2900))
+              : Math.round((totalPlanoPotong / 225) * 339000 * (pPrice / 2900));
+          if (!bestPlanoOption || paperOffsetCost < bestPlanoOption.paperOffsetCost) {
+            bestPlanoOption = { planoItem: planoCand, planoFitBody: pFitBody, planoFitTutup: pFitTutup, rawPlanoBody: rBody, rawPlanoTutup: rTutup, totalPlanoPotong, paperOffsetCost };
+          }
+        }
+
+        if (bestPlanoOption) {
+          const extraDruk = safeQty > 2000 ? (safeQty - 2000) * lebihDrukRate * totalPages : 0;
+          const cetakOffsetCost = totalPages * biayaPerPage + extraDruk;
+          const offsetTotalCost = cetakOffsetCost + sharedLaminasiCost + bestPlanoOption.paperOffsetCost;
+          const chosenPlanoSize = bestPlanoOption.planoItem.ukuranPlano;
+          printComparisons.push({
+            label: offMachine.mesinCetak,
+            detail: `[${totalPages} Page (${bestPlanoOption.totalPlanoPotong} lembar plano potong)]`,
+            formatUkuran: `Plano ${chosenPlanoSize} cm (Area Mesin ${offMachine.ukuranAreaCetak} cm)`,
+            metode: `Offset ${offMachine.mesinCetak}`,
+            layoutInfo: `Body ${bestPlanoOption.planoFitBody}-up/plano (${machineFitBody}-up/plat), Tutup ${bestPlanoOption.planoFitTutup}-up/plano (${machineFitTutup}-up/plat)`,
+            kebutuhanLembar: `${bestPlanoOption.totalPlanoPotong} lembar plano potong (${totalPages} Page)`,
+            totalCost: offsetTotalCost,
+            cetakCost: cetakOffsetCost,
+            paperCost: bestPlanoOption.paperOffsetCost,
+            laminasiCost: sharedLaminasiCost,
+            laminasiLabel: sharedLaminasiLabel,
+            isValid: true,
+            isRecommended: false,
+            bodySheetLine: hasOuterBody
+              ? `Lapisan body : ${canonicalOuterName}_${bestPlanoOption.rawPlanoBody} lbr plano_${chosenPlanoSize} cm_potong jadi ${cutLuarBody.p.toFixed(1)} x ${cutLuarBody.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} - 1 plano muat ${bestPlanoOption.planoFitBody} pcs)`
+              : 'Lapisan body : Tidak menggunakan lapisan luar body',
+            tutupSheetLine: hasOuterTutup
+              ? `Lapisan tutup : ${canonicalOuterName}_${bestPlanoOption.rawPlanoTutup} lbr plano_${chosenPlanoSize} cm_potong jadi ${cutLuarTutup.p.toFixed(1)} x ${cutLuarTutup.l.toFixed(1)} cm (offset ${offMachine.mesinCetak} - 1 plano muat ${bestPlanoOption.planoFitTutup} pcs)`
+              : 'Lapisan tutup : Tidak menggunakan lapisan luar tutup',
+          });
+        }
+      }
+    });
+  }
 
   // STEP 6 & 7: Bandingkan TOTAL biaya produksi dan pilih otomatis kombinasi yang paling murah
   let minIdx = 0;

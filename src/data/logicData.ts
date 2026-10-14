@@ -107,6 +107,32 @@ export const INITIAL_LOGIKA_MODEL_DATA: LogicRuleItem[] = [
       'Tinggi tutup otomatis untuk model Buka Tutup dengan tinggi box minimal 10 cm',
     aksi: 'Set Tt = 3 cm',
   },
+  {
+    id: 'lm-4',
+    namaAturan: 'Sambungan 3 – Model Buka Tutup',
+    kondisiTrigger: 'Model = Buka Tutup (Terpisah / Full) AND bentangan lapisan luar tidak muat utuh di mesin',
+    rumusTindakan:
+      'Lapisan Luar Tutup: [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2) | ' +
+      'Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt] & [T] (×2) | ' +
+      'Lapisan Luar Body: [P] | [L+T+4] & [T+4] (×2) | ' +
+      'Lapisan Dalam Body: [P] | [L+T] & [T] (×2)',
+    keterangan:
+      'Pemecahan layout 3 bagian (Sambungan 3) untuk box buka tutup pisah. Digunakan ketika bentangan lapisan luar tidak muat dalam 1 lembar utuh di mesin yang dipilih. Ketentuan: Jika pada mesin (Digital, Offset 52, atau Offset 58) muat utuh, maka rekomendasi sambungan 3 dan 5 tidak aktif. Sambungan 3 aktif hanya jika mesin tidak bisa mencetak utuh (pada Digital, opsi utuh tidak ditampilkan).',
+    aksi: 'Hitung biaya per potongan × qty, bandingkan dengan metode Utuh/Sambungan 5',
+  },
+  {
+    id: 'lm-5',
+    namaAturan: 'Sambungan 5 – Model Buka Tutup (Fallback)',
+    kondisiTrigger: 'Model = Buka Tutup AND Sambungan 3 tidak muat di mesin',
+    rumusTindakan:
+      'Lapisan Luar Tutup: [P+0.6] | [L+0.6+Tt+4] & [T+4] (×2) & [P] (×2) | ' +
+      'Lapisan Dalam Tutup: [P+0.6] | [L+0.6+Tt] & [T] (×2) & [P] (×2) | ' +
+      'Lapisan Luar Body: [P] | [L+T+4] & [T+4] (×2) & [P+4] (×2) | ' +
+      'Lapisan Dalam Body: [P] | [L+T] & [T] (×2) & [P] (×2)',
+    keterangan:
+      'Pemecahan layout 5 bagian (Sambungan 5) untuk box buka tutup pisah. Digunakan sebagai fallback ketika Sambungan 3 tidak muat di Digital/Offset. Ketentuan: Jika pada mesin (Digital, Offset 52, atau Offset 58) muat utuh, maka rekomendasi sambungan 3 dan 5 tidak aktif. Sambungan 5 aktif hanya jika mesin tidak bisa mencetak utuh.',
+    aksi: 'Hitung biaya per potongan × qty, bandingkan dengan Sambungan 3 dan Utuh',
+  },
 ];
 
 export const INITIAL_LOGIKA_MESIN_DATA: LogicRuleItem[] = [
