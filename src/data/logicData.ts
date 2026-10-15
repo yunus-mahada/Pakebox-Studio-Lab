@@ -306,6 +306,17 @@ export const INITIAL_LOGIKA_PROSES_DATA: LogicRuleItem[] = [
       'Perhitungan biaya pisau innerbox berdasarkan ukuran dasar box (P x L). Jika user memilih tambah inner maka ketentuan ini aktif, jika tidak memilih maka tidak aktif.',
     aksi: 'Aktifkan / Hitung Pisau Innerbox',
   },
+  {
+    id: 'lp-9',
+    namaAturan: 'Penentuan Biaya Finishing (Jasa Rakit Dinamis)',
+    kondisiTrigger: 'Perhitungan Jasa Rakit Model Box',
+    rumusTindakan:
+      'Volume ≤ 675 cm³ (15x15x3) ➔ Harga Terendah; Volume ≥ 12.000 cm³ (40x30x10) ➔ Harga Maksimal (Mentok); ' +
+      'Rentang 675–12.000 cm³ ➔ Min + [((Vol - 675)/(12.000 - 675)) x (Max - Min)]',
+    keterangan:
+      'Patokan volume min 15 x 15 x 3 cm (675 cm³) dikenakan harga terendah (jika ukuran di bawah itu tetap terhitung biaya terendah). Patokan volume max 40 x 30 x 10 cm (12.000 cm³) dikenakan harga maksimal tertinggi (jika ukuran di atas ini tarif mentok di harga maksimal). Ukuran di antara rentang tersebut dihitung proporsional berbasis rasio volume.',
+    aksi: 'Hitung Jasa Rakit Proporsional Berbasis Rentang Volume',
+  },
 ];
 
 export const INITIAL_LOGIKA_HARGA_DATA: LogicRuleItem[] = [
@@ -459,11 +470,19 @@ export const INITIAL_LOGIKA_ONGKIR_DATA: LogicRuleItem[] = [
     aksi: 'Hitung Volumetrik 30.25 kg/koli',
   },
   {
+    id: 'lo-paxel-1',
+    namaAturan: 'Ketentuan Khusus Paxel Big – Batas Maksimal Tarif per Koli',
+    kondisiTrigger: 'Service = Paxel Big (Kardus Master 55x55x40 cm / 30.25 kg)',
+    rumusTindakan: 'Maksimal 1 koli harganya 90 rb (Biaya per Koli = Min(Tarif Hitung, Rp 90.000))',
+    keterangan: 'Khusus untuk Paxel Big memiliki ketentuan: Maksimal 1 koli harganya Rp 90.000. Biaya per koli tidak boleh melebihi Rp 90.000 meskipun berat volumetrik kardus master dihitung 30.25 kg.',
+    aksi: 'Kunci Maksimal Rp 90.000 / Koli',
+  },
+  {
     id: 'lo-4',
     namaAturan: 'Kalkulasi Tarif Dasar & Minimum Ongkir',
     kondisiTrigger: 'Perhitungan Biaya per Koli dari Database Modal Ongkir',
-    rumusTindakan: 'Biaya = Max(Minimum Harga, Min + ((Berat - 10) x Harga/kg)); Max = ((25 - 10) x Harga/kg) + Minimum Harga',
-    keterangan: 'Biaya per koli tidak boleh lebih kecil dari Minimum Harga dan mengikuti batasan maximum harga modal ongkir.',
+    rumusTindakan: 'Biaya = Min(Max(Minimum Harga, Min + ((Berat - 10) x Harga/kg)), Maximum Harga)',
+    keterangan: 'Biaya per koli tidak boleh lebih kecil dari Minimum Harga dan mengikuti batasan maximum harga modal ongkir (Paxel Big max Rp 90.000).',
     aksi: 'Terapkan Tarif Dasar Ongkir',
   },
   {

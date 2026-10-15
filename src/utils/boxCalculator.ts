@@ -1845,19 +1845,33 @@ export function calculateBoxEstimation(
     }
   });
 
-  // Finishing Cost (Jasa Rakit Dinamis from finishingItems)
+  // Finishing Cost (Jasa Rakit Dinamis dari finishingItems)
+  // Patokan:
+  // - 15 x 15 x 3 cm (675 cm³): Harga terendah (minPrice), di bawah ini tetap terhitung minPrice
+  // - 40 x 30 x 10 cm (12.000 cm³): Harga tertinggi (maxPrice), di atas ini mentok di maxPrice
   const finishingRef =
     databases.finishingItems.find(
       (f) => f.modelBox.toLowerCase() === (model?.modelBox || '').toLowerCase()
     ) || databases.finishingItems[0];
 
-  const minFin = finishingRef?.minPrice ?? 4000;
-  const maxFin = finishingRef?.maxPrice ?? 10000;
+  const minFin = finishingRef?.minPrice ?? 3500;
+  const maxFin = finishingRef?.maxPrice ?? 12000;
   const volume = P * L * T;
-  const volRatio = Math.min(1, Math.max(0, volume / 12000));
-  const extraLargeDimension = P > 30 || L > 30 || T > 30 ? 500 : 0;
-  const finishingRatePerPcs =
-    Math.round(minFin + volRatio * (maxFin - minFin)) + extraLargeDimension;
+  const MIN_VOL = 15 * 15 * 3; // 675 cm³ -> Biaya Terendah
+  const MAX_VOL = 40 * 30 * 10; // 12.000 cm³ -> Biaya Tertinggi (mentok)
+
+  let finishingRatePerPcs: number;
+  if (volume <= MIN_VOL) {
+    finishingRatePerPcs = minFin;
+  } else if (volume >= MAX_VOL) {
+    finishingRatePerPcs = maxFin;
+  } else {
+    const volRatio = (volume - MIN_VOL) / (MAX_VOL - MIN_VOL);
+    finishingRatePerPcs = Math.round(minFin + volRatio * (maxFin - minFin));
+  }
+
+  // Pastikan tarif tidak melebihi batas maksimal yang ditentukan
+  finishingRatePerPcs = Math.min(maxFin, Math.max(minFin, finishingRatePerPcs));
   const finishingCost = finishingRatePerPcs * safeQty;
 
   // Ongkos Pond / Druk (Aktif jika Qty >= 100 pcs)

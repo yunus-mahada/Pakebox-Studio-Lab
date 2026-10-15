@@ -119,7 +119,7 @@ const KALKULATOR_CHILDREN: MenuItem[] = [
   { id: 'kalkulator-box', label: 'Hardbox', icon: Box, inKalkulatorGroup: true },
   { id: 'paperbag', label: 'Paperbag', icon: ShoppingBag, inKalkulatorGroup: true },
   { id: 'softbox', label: 'Softbox', icon: Package, inKalkulatorGroup: true },
-  { id: 'hitung-ongkir', label: 'Hitung Ongkir', icon: Truck, inKalkulatorGroup: true },
+  { id: 'hitung-ongkir', label: 'H.Ongkir Box', icon: Truck, inKalkulatorGroup: true },
 ];
 
 const MODAL_KALKULATOR_CHILDREN: MenuItem[] = [
@@ -171,7 +171,7 @@ const LOGIC_TABS: {
   { id: 'logika-ongkir', label: 'Logika Ongkir', icon: Truck },
 ];
 
-const STORAGE_KEY_FINISHING = 'pakebox_studio_finishing_v1';
+const STORAGE_KEY_FINISHING = 'pakebox_studio_finishing_v3';
 const STORAGE_KEY_FORMULA = 'pakebox_studio_formula_v1';
 const STORAGE_KEY_DIGITAL = 'pakebox_studio_process_digital_v2';
 const STORAGE_KEY_OFFSET = 'pakebox_studio_process_offset_v3';
@@ -247,7 +247,16 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_LOGIKA_PROSES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: LogicRuleItem) => item.id));
+          const missing = INITIAL_LOGIKA_PROSES_DATA.filter((item) => !existingIds.has(item.id));
+          if (missing.length > 0) {
+            const merged = [...parsed, ...missing];
+            localStorage.setItem(STORAGE_KEY_LOGIKA_PROSES, JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
       }
     } catch {
       // Fallback
@@ -273,7 +282,16 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY_LOGIKA_ONGKIR);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const existingIds = new Set(parsed.map((item: LogicRuleItem) => item.id));
+          const missing = INITIAL_LOGIKA_ONGKIR_DATA.filter((item) => !existingIds.has(item.id));
+          if (missing.length > 0) {
+            const merged = [...parsed, ...missing];
+            localStorage.setItem(STORAGE_KEY_LOGIKA_ONGKIR, JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
       }
     } catch {
       // Fallback
@@ -484,7 +502,13 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((it: ShippingRateItem) => ({
+          const existingIds = new Set(parsed.map((item: ShippingRateItem) => item.id));
+          const missing = INITIAL_ONGKIR_DATA.filter((item) => !existingIds.has(item.id));
+          const combined = missing.length > 0 ? [...parsed, ...missing] : parsed;
+          if (missing.length > 0) {
+            localStorage.setItem(STORAGE_KEY_ONGKIR, JSON.stringify(combined));
+          }
+          return combined.map((it: ShippingRateItem) => ({
             ...it,
             maximumHarga: it.maximumHarga ?? calculateMaxOngkir(it.hargaPerKg, it.minimumHarga),
           }));
@@ -508,13 +532,13 @@ export default function App() {
   const [ongkirFormError, setOngkirFormError] = useState('');
   const [deleteOngkirConfirmId, setDeleteOngkirConfirmId] = useState<string | null>(null);
 
-  // State: Kalkulator Hitung Ongkir
-  const [calcOngkirOrigin, setCalcOngkirOrigin] = useState<string>('Bandung');
-  const [calcOngkirDestination, setCalcOngkirDestination] = useState<string>('Tangerang');
-  const [calcOngkirP, setCalcOngkirP] = useState<string>('20');
-  const [calcOngkirL, setCalcOngkirL] = useState<string>('15');
-  const [calcOngkirT, setCalcOngkirT] = useState<string>('10');
-  const [calcOngkirQty, setCalcOngkirQty] = useState<string>('100');
+  // State: Kalkulator H.Ongkir Box (Default Nol dan Pilih Kota)
+  const [calcOngkirOrigin, setCalcOngkirOrigin] = useState<string>('');
+  const [calcOngkirDestination, setCalcOngkirDestination] = useState<string>('');
+  const [calcOngkirP, setCalcOngkirP] = useState<string>('0');
+  const [calcOngkirL, setCalcOngkirL] = useState<string>('0');
+  const [calcOngkirT, setCalcOngkirT] = useState<string>('0');
+  const [calcOngkirQty, setCalcOngkirQty] = useState<string>('0');
   const [selectedShippingServiceId, setSelectedShippingServiceId] = useState<string | null>(null);
 
   // State: Kalkulator Box (Card Kiri Input - User hanya memilih Nama Bahan)
@@ -945,6 +969,17 @@ export default function App() {
     }
   }, [logikaOngkirItems]);
 
+  // Reset input Kalkulator H.Ongkir Box kembali ke default saat berpindah menu
+  useEffect(() => {
+    setCalcOngkirOrigin('');
+    setCalcOngkirDestination('');
+    setCalcOngkirP('0');
+    setCalcOngkirL('0');
+    setCalcOngkirT('0');
+    setCalcOngkirQty('0');
+    setSelectedShippingServiceId(null);
+  }, [activeMenu]);
+
   // Dropdown list kota asal & tujuan dari modal ongkir
   const availableOrigins = useMemo(() => {
     const list: string[] = [];
@@ -987,6 +1022,10 @@ export default function App() {
   const matchingShippingServices = useMemo(() => {
     const origin = calcOngkirOrigin.trim().toLowerCase();
     const dest = calcOngkirDestination.trim().toLowerCase();
+
+    if (!origin || !dest) {
+      return [];
+    }
 
     const matches = ongkirItems.filter(
       (it) =>
@@ -4774,7 +4813,7 @@ export default function App() {
                       <Truck className="h-4 w-4" />
                     </div>
                     <h1 className="text-base sm:text-lg font-bold text-[#E5C158] tracking-tight">
-                      Kalkulator Hitung Ongkir &amp; Koli
+                      Kalkulator H.Ongkir Box &amp; Koli
                     </h1>
                   </div>
                   <p className="text-xs text-[#8FA599] max-w-2xl">
@@ -4807,22 +4846,35 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
                 {/* KOLOM KIRI (Input Data & Card Tambahan Kardus Master) */}
                 <div className="lg:col-span-5 space-y-4">
-                  {/* CARD 1 KIRI: Penginputan Data */}
-                  <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-4 sm:p-5 shadow-lg space-y-4">
-                    <div className="flex items-center justify-between border-b border-[#D4AF37]/15 pb-3">
-                      <div className="flex items-center gap-2">
-                        <Calculator className="h-4 w-4 text-[#D4AF37]" />
-                        <h2 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
-                          Input Data Pengiriman
-                        </h2>
+                  {/* CARD 1 KIRI: Penginputan Data (Gold Card Theme) */}
+                  <section className="rounded-xl border-2 border-[#D4AF37]/50 bg-gradient-to-br from-[#1C1709] via-[#141208] to-[#0D1812] p-4 sm:p-5 shadow-[0_4px_24px_rgba(212,175,55,0.12)] space-y-4 relative overflow-hidden ring-1 ring-[#D4AF37]/20">
+                    {/* Ambient gold glow */}
+                    <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#D4AF37]/10 blur-2xl" />
+
+                    <div className="relative flex items-center justify-between border-b border-[#D4AF37]/25 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#B38F26] text-[#07140F] shadow-sm">
+                          <Calculator className="h-4 w-4 stroke-[2.5]" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-xs sm:text-sm font-extrabold text-[#F5DF88] uppercase tracking-wide">
+                              Input Data Pengiriman
+                            </h2>
+                            <span className="rounded bg-[#D4AF37]/20 border border-[#D4AF37]/40 px-1.5 py-0.5 text-[9.5px] font-bold text-[#F3D77D] uppercase tracking-wider">
+                              Proses Input
+                            </span>
+                          </div>
+                        </div>
                       </div>
                       <button
                         type="button"
                         onClick={handleSyncFromBoxCalc}
-                        className="text-[11px] font-semibold text-[#D4AF37] hover:text-[#E5C158] hover:underline transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/45 bg-[#251E0E] hover:bg-[#342A13] px-2.5 py-1 text-[11px] font-semibold text-[#F3D77D] hover:text-[#FFF0B8] transition-all cursor-pointer shadow-xs"
                         title="Ambil P, L, T, dan Qty dari Kalkulator Hardbox"
                       >
-                        Salin dari Hardbox
+                        <Box className="h-3.5 w-3.5 text-[#D4AF37]" />
+                        <span>Salin dari Hardbox</span>
                       </button>
                     </div>
 
@@ -4830,7 +4882,7 @@ export default function App() {
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#EBDCB2] mb-1.5">
                             <MapPin className="h-3.5 w-3.5 text-[#D4AF37]" />
                             <span>Kota Asal</span>
                           </label>
@@ -4840,23 +4892,20 @@ export default function App() {
                               setCalcOngkirOrigin(e.target.value);
                               setSelectedShippingServiceId(null);
                             }}
-                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                            className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none cursor-pointer"
                           >
-                            {availableOrigins.length === 0 ? (
-                              <option value="">Belum ada data kota asal</option>
-                            ) : (
-                              availableOrigins.map((kota) => (
-                                <option key={kota} value={kota}>
-                                  {kota}
-                                </option>
-                              ))
-                            )}
+                            <option value="">-- Pilih Kota Asal --</option>
+                            {availableOrigins.map((kota) => (
+                              <option key={kota} value={kota}>
+                                {kota}
+                              </option>
+                            ))}
                           </select>
                         </div>
 
                         <div>
-                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#B8C7BE] mb-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#EBDCB2] mb-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-[#F3D77D]" />
                             <span>Kota Tujuan</span>
                           </label>
                           <select
@@ -4865,27 +4914,24 @@ export default function App() {
                               setCalcOngkirDestination(e.target.value);
                               setSelectedShippingServiceId(null);
                             }}
-                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                            className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none cursor-pointer"
                           >
-                            {availableDestinations.length === 0 ? (
-                              <option value="">Tidak ada rute tujuan</option>
-                            ) : (
-                              availableDestinations.map((kota) => (
-                                <option key={kota} value={kota}>
-                                  {kota}
-                                </option>
-                              ))
-                            )}
+                            <option value="">-- Pilih Kota Tujuan --</option>
+                            {availableDestinations.map((kota) => (
+                              <option key={kota} value={kota}>
+                                {kota}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
 
-                      {matchingShippingServices.length === 0 && (
+                      {calcOngkirOrigin && calcOngkirDestination && matchingShippingServices.length === 0 && (
                         <div className="rounded-lg border border-[#F43F5E]/30 bg-[#2A1216] p-2.5 text-[11px] text-[#FDA4AF] flex items-center justify-between">
                           <span>Belum ada tarif untuk rute ini.</span>
                           <button
                             onClick={() => handleSelectMenu('modal-ongkir')}
-                            className="underline font-semibold text-[#FDA4AF] hover:text-white"
+                            className="underline font-semibold text-[#FDA4AF] hover:text-white cursor-pointer"
                           >
                             Tambah di Modal Ongkir
                           </button>
@@ -4894,77 +4940,89 @@ export default function App() {
                     </div>
 
                     {/* Baris Kedua: Input Dimensi Box Satuan (P, L, T) dan Qty */}
-                    <div className="space-y-3 pt-2 border-t border-[#D4AF37]/10">
+                    <div className="space-y-3 pt-2 border-t border-[#D4AF37]/20">
                       <div>
-                        <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                        <label className="block text-xs font-semibold text-[#EBDCB2] mb-1.5">
                           Ukuran Box Satuan (cm)
                         </label>
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <span className="block text-[10px] text-[#8FA599] mb-1">Panjang (P)</span>
+                            <span className="block text-[10px] text-[#C5B896] mb-1">Panjang (P)</span>
                             <div className="relative">
                               <input
                                 type="number"
-                                min={1}
+                                min={0}
                                 step="any"
                                 value={calcOngkirP}
                                 onChange={(e) => setCalcOngkirP(e.target.value)}
-                                placeholder="P"
-                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                                onFocus={(e) => {
+                                  if (e.target.value === '0') e.target.select();
+                                }}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] px-2.5 py-1.5 font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none text-center"
                               />
-                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#8C7A52]">cm</span>
                             </div>
                           </div>
 
                           <div>
-                            <span className="block text-[10px] text-[#8FA599] mb-1">Lebar (L)</span>
+                            <span className="block text-[10px] text-[#C5B896] mb-1">Lebar (L)</span>
                             <div className="relative">
                               <input
                                 type="number"
-                                min={1}
+                                min={0}
                                 step="any"
                                 value={calcOngkirL}
                                 onChange={(e) => setCalcOngkirL(e.target.value)}
-                                placeholder="L"
-                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                                onFocus={(e) => {
+                                  if (e.target.value === '0') e.target.select();
+                                }}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] px-2.5 py-1.5 font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none text-center"
                               />
-                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#8C7A52]">cm</span>
                             </div>
                           </div>
 
                           <div>
-                            <span className="block text-[10px] text-[#8FA599] mb-1">Tinggi (T)</span>
+                            <span className="block text-[10px] text-[#C5B896] mb-1">Tinggi (T)</span>
                             <div className="relative">
                               <input
                                 type="number"
-                                min={1}
+                                min={0}
                                 step="any"
                                 value={calcOngkirT}
                                 onChange={(e) => setCalcOngkirT(e.target.value)}
-                                placeholder="T"
-                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                                onFocus={(e) => {
+                                  if (e.target.value === '0') e.target.select();
+                                }}
+                                placeholder="0"
+                                className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] px-2.5 py-1.5 font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none text-center"
                               />
-                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#8C7A52]">cm</span>
                             </div>
                           </div>
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                        <label className="block text-xs font-semibold text-[#EBDCB2] mb-1.5">
                           Jumlah Box Pesanan (Qty)
                         </label>
                         <div className="relative">
                           <input
                             type="number"
-                            min={1}
+                            min={0}
                             step={1}
                             value={calcOngkirQty}
                             onChange={(e) => setCalcOngkirQty(e.target.value)}
-                            placeholder="Contoh: 100"
-                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-3 pr-12 py-2 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                            onFocus={(e) => {
+                              if (e.target.value === '0') e.target.select();
+                            }}
+                            placeholder="0"
+                            className="w-full rounded-lg border border-[#D4AF37]/40 bg-[#0E0C06] pl-3 pr-12 py-2 font-mono-tabular text-xs font-bold text-[#F4F1EA] focus:border-[#F3D77D] focus:ring-1 focus:ring-[#D4AF37]/40 focus:outline-none"
                           />
-                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#8FA599]">
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#C5B896]">
                             pcs
                           </span>
                         </div>
@@ -5033,9 +5091,9 @@ export default function App() {
                         </h2>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs font-mono-tabular">
-                        <span className="text-[#8FA599]">{calcOngkirOrigin || '-'}</span>
+                        <span className="text-[#8FA599]">{calcOngkirOrigin || 'Pilih Asal'}</span>
                         <ArrowRight className="h-3 w-3 text-[#D4AF37]" />
-                        <span className="text-[#E5C158] font-bold">{calcOngkirDestination || '-'}</span>
+                        <span className="text-[#E5C158] font-bold">{calcOngkirDestination || 'Pilih Tujuan'}</span>
                       </div>
                     </div>
 
@@ -5152,7 +5210,9 @@ export default function App() {
                           </h3>
                         </div>
                         <p className="text-[11px] text-[#8FA599]">
-                          Pilihan layanan yang tersedia untuk rute {calcOngkirOrigin} ➔ {calcOngkirDestination}
+                          {calcOngkirOrigin && calcOngkirDestination
+                            ? `Pilihan layanan yang tersedia untuk rute ${calcOngkirOrigin} ➔ ${calcOngkirDestination}`
+                            : 'Silakan pilih Kota Asal & Kota Tujuan pada form input gold di sebelah kiri'}
                         </p>
                       </div>
                       <span className="rounded-full bg-[#122D22] border border-[#D4AF37]/30 px-2.5 py-0.5 font-mono-tabular text-[11px] text-[#F3D77D]">
@@ -5164,18 +5224,24 @@ export default function App() {
                       <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-6 text-center space-y-2">
                         <Truck className="h-7 w-7 text-[#D4AF37]/40 mx-auto" />
                         <div className="text-xs font-semibold text-[#F4F1EA]">
-                          Tidak ada service yang terdaftar untuk rute ini
+                          {!calcOngkirOrigin || !calcOngkirDestination
+                            ? 'Silakan Tentukan Kota Asal & Kota Tujuan'
+                            : 'Tidak ada service yang terdaftar untuk rute ini'}
                         </div>
                         <p className="text-[11px] text-[#8FA599] max-w-sm mx-auto">
-                          Silakan tambahkan data tarif baru pada menu Modal Ongkir untuk menghubungkannya ke kalkulator ini.
+                          {!calcOngkirOrigin || !calcOngkirDestination
+                            ? 'Pilih rute pengiriman dan isi dimensi box satuan pada panel input gold di sebelah kiri.'
+                            : 'Silakan tambahkan data tarif baru pada menu Modal Ongkir untuk rute ini.'}
                         </p>
-                        <button
-                          onClick={() => handleSelectMenu('modal-ongkir')}
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-3.5 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer"
-                        >
-                          <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
-                          <span>Tambah Tarif di Modal Ongkir</span>
-                        </button>
+                        {calcOngkirOrigin && calcOngkirDestination && (
+                          <button
+                            onClick={() => handleSelectMenu('modal-ongkir')}
+                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-3.5 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                            <span>Tambah Tarif di Modal Ongkir</span>
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2.5">
@@ -5210,6 +5276,12 @@ export default function App() {
                                   <span className="rounded border border-[#D4AF37]/25 bg-[#081610] px-2 py-0.5 text-[10px] text-[#A7BBB0]">
                                     {opt.service.estimasiTiba}
                                   </span>
+
+                                  {opt.service.service.toLowerCase().includes('paxel big') && (
+                                    <span className="rounded border border-amber-500/35 bg-amber-950/50 px-2 py-0.5 text-[9.5px] font-semibold text-amber-300">
+                                      Maks {formatRupiah(opt.service.maximumHarga || 0)} / koli
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#8FA599]">
