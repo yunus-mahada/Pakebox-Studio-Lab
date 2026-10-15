@@ -2,7 +2,8 @@ export type LogicTabKey =
   | 'logika-model'
   | 'logika-mesin'
   | 'logika-proses'
-  | 'logika-harga';
+  | 'logika-harga'
+  | 'logika-ongkir';
 
 export interface LogicRuleItem {
   id: string;
@@ -429,5 +430,48 @@ export const INITIAL_LOGIKA_HARGA_DATA: LogicRuleItem[] = [
     rumusTindakan: 'Pengali = 2.00 (Modal x 2.00)',
     keterangan: 'Mencari harga jual dengan margin 50%: Modal x 2.00',
     aksi: 'Kalikan 2.00',
+  },
+];
+
+export const INITIAL_LOGIKA_ONGKIR_DATA: LogicRuleItem[] = [
+  {
+    id: 'lo-1',
+    namaAturan: 'Kardus Master Packing Standar',
+    kondisiTrigger: 'Wadah Koli Pengiriman Workshop',
+    rumusTindakan: 'Dimensi = 55 cm x 55 cm x 40 cm (Volume = 121.000 cm³)',
+    keterangan: 'Ukuran kardus master standar yang kita miliki di sistem untuk menghitung daya tampung koli pengiriman.',
+    aksi: 'Pakai Kardus 55x55x40 cm',
+  },
+  {
+    id: 'lo-2',
+    namaAturan: 'Perhitungan Kapasitas & Jumlah Koli',
+    kondisiTrigger: 'Input Dimensi Box (P x L x T) & Qty',
+    rumusTindakan: 'Pcs/Kardus = floor(55/P) x floor(55/L) x floor(40/T); Jumlah Koli = ceil(Qty / Pcs Per Kardus)',
+    keterangan: 'Sistem mencoba kombinasi orientasi 3D terbaik untuk menampung box secara maksimal ke dalam kardus master 55x55x40 cm.',
+    aksi: 'Hitung Muatan Koli',
+  },
+  {
+    id: 'lo-3',
+    namaAturan: 'Berat Volumetrik Kargo Ekspedisi',
+    kondisiTrigger: 'Kargo / Paket Besar (Paxel Big, Trucking)',
+    rumusTindakan: 'Berat Volumetrik = (55 x 55 x 40) / 4.000 = 30.25 kg per koli',
+    keterangan: 'Perhitungan berat kubikasi kardus master 55x55x40 cm sesuai regulasi berat volumetrik kargo ekspedisi.',
+    aksi: 'Hitung Volumetrik 30.25 kg/koli',
+  },
+  {
+    id: 'lo-4',
+    namaAturan: 'Kalkulasi Tarif Dasar & Minimum Ongkir',
+    kondisiTrigger: 'Perhitungan Biaya per Koli dari Database Modal Ongkir',
+    rumusTindakan: 'Biaya = Max(Minimum Harga, Min + ((Berat - 10) x Harga/kg)); Max = ((25 - 10) x Harga/kg) + Minimum Harga',
+    keterangan: 'Biaya per koli tidak boleh lebih kecil dari Minimum Harga dan mengikuti batasan maximum harga modal ongkir.',
+    aksi: 'Terapkan Tarif Dasar Ongkir',
+  },
+  {
+    id: 'lo-5',
+    namaAturan: 'Rekomendasi Layanan Termurah',
+    kondisiTrigger: 'Pencarian Layanan pada Rute Kota Asal ➔ Kota Tujuan',
+    rumusTindakan: 'Urutkan Total Biaya Ascending ➔ Tandai Service Terendah sebagai "Rekomendasi Termurah"',
+    keterangan: 'Sistem secara otomatis merekomendasikan ekspedisi dengan biaya total paling hemat untuk rute yang dipilih.',
+    aksi: 'Rekomendasikan Layanan Termurah',
   },
 ];

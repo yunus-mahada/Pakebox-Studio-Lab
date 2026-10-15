@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowRight,
   Award,
   BookOpen,
   Box,
   Calculator,
+  Check,
   ChevronDown,
   ChevronRight,
   Construction,
@@ -14,6 +16,7 @@ import {
   FolderKanban,
   Layers,
   Lightbulb,
+  MapPin,
   Menu,
   Package,
   Pencil,
@@ -38,6 +41,14 @@ import {
   formatRupiah,
 } from './data/finishingData';
 import {
+  INITIAL_ONGKIR_DATA,
+  MASTER_CARTON,
+  ShippingRateItem,
+  calculateCartonPacking,
+  calculateMaxOngkir,
+  estimateShippingCost,
+} from './data/ongkirData';
+import {
   INITIAL_FORMULA_DATA,
   ModelFormulaItem,
 } from './data/formulaData';
@@ -45,6 +56,7 @@ import {
   INITIAL_LOGIKA_HARGA_DATA,
   INITIAL_LOGIKA_MESIN_DATA,
   INITIAL_LOGIKA_MODEL_DATA,
+  INITIAL_LOGIKA_ONGKIR_DATA,
   INITIAL_LOGIKA_PROSES_DATA,
   LogicRuleItem,
   LogicTabKey,
@@ -156,6 +168,7 @@ const LOGIC_TABS: {
   { id: 'logika-mesin', label: 'Logika Mesin', icon: Cpu },
   { id: 'logika-proses', label: 'Logika Proses', icon: ShieldCheck },
   { id: 'logika-harga', label: 'Logika Harga', icon: Tag },
+  { id: 'logika-ongkir', label: 'Logika Ongkir', icon: Truck },
 ];
 
 const STORAGE_KEY_FINISHING = 'pakebox_studio_finishing_v1';
@@ -172,6 +185,8 @@ const STORAGE_KEY_LOGIKA_MODEL = 'pakebox_studio_logic_model_v2';
 const STORAGE_KEY_LOGIKA_MESIN = 'pakebox_studio_logic_mesin_v4';
 const STORAGE_KEY_LOGIKA_PROSES = 'pakebox_studio_logic_proses_v2';
 const STORAGE_KEY_LOGIKA_HARGA = 'pakebox_studio_logic_harga_v2';
+const STORAGE_KEY_LOGIKA_ONGKIR = 'pakebox_studio_logic_ongkir_v1';
+const STORAGE_KEY_ONGKIR = 'pakebox_studio_ongkir_v1';
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuKey>('kalkulator-box');
@@ -251,6 +266,19 @@ export default function App() {
       // Fallback
     }
     return INITIAL_LOGIKA_HARGA_DATA;
+  });
+
+  const [logikaOngkirItems, setLogikaOngkirItems] = useState<LogicRuleItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LOGIKA_ONGKIR);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return INITIAL_LOGIKA_ONGKIR_DATA;
   });
 
   const [isLogicModalOpen, setIsLogicModalOpen] = useState(false);
@@ -448,6 +476,46 @@ export default function App() {
   const [fPisauTutup, setFPisauTutup] = useState('');
   const [formulaFormError, setFormulaFormError] = useState('');
   const [deleteFormulaConfirmId, setDeleteFormulaConfirmId] = useState<string | null>(null);
+
+  // State: Modal Ongkir
+  const [ongkirItems, setOngkirItems] = useState<ShippingRateItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_ONGKIR);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((it: ShippingRateItem) => ({
+            ...it,
+            maximumHarga: it.maximumHarga ?? calculateMaxOngkir(it.hargaPerKg, it.minimumHarga),
+          }));
+        }
+      }
+    } catch {
+      // Fallback to initial data
+    }
+    return INITIAL_ONGKIR_DATA;
+  });
+
+  const [ongkirSearch, setOngkirSearch] = useState('');
+  const [isOngkirModalOpen, setIsOngkirModalOpen] = useState(false);
+  const [editingOngkir, setEditingOngkir] = useState<ShippingRateItem | null>(null);
+  const [formService, setFormService] = useState('');
+  const [formKotaAsal, setFormKotaAsal] = useState('');
+  const [formKotaTujuan, setFormKotaTujuan] = useState('');
+  const [formEstimasiTiba, setFormEstimasiTiba] = useState('');
+  const [formHargaPerKg, setFormHargaPerKg] = useState('');
+  const [formMinimumHarga, setFormMinimumHarga] = useState('');
+  const [ongkirFormError, setOngkirFormError] = useState('');
+  const [deleteOngkirConfirmId, setDeleteOngkirConfirmId] = useState<string | null>(null);
+
+  // State: Kalkulator Hitung Ongkir
+  const [calcOngkirOrigin, setCalcOngkirOrigin] = useState<string>('Bandung');
+  const [calcOngkirDestination, setCalcOngkirDestination] = useState<string>('Tangerang');
+  const [calcOngkirP, setCalcOngkirP] = useState<string>('20');
+  const [calcOngkirL, setCalcOngkirL] = useState<string>('15');
+  const [calcOngkirT, setCalcOngkirT] = useState<string>('10');
+  const [calcOngkirQty, setCalcOngkirQty] = useState<string>('100');
+  const [selectedShippingServiceId, setSelectedShippingServiceId] = useState<string | null>(null);
 
   // State: Kalkulator Box (Card Kiri Input - User hanya memilih Nama Bahan)
   const [calcModelId, setCalcModelId] = useState<string>(() => INITIAL_FORMULA_DATA[0]?.id || '');
@@ -849,6 +917,120 @@ export default function App() {
     );
   }, [formulaItems, formulaSearch]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_ONGKIR, JSON.stringify(ongkirItems));
+    } catch {
+      // Ignore
+    }
+  }, [ongkirItems]);
+
+  const filteredOngkirItems = useMemo(() => {
+    const q = ongkirSearch.trim().toLowerCase();
+    if (!q) return ongkirItems;
+    return ongkirItems.filter(
+      (item) =>
+        item.service.toLowerCase().includes(q) ||
+        item.kotaAsal.toLowerCase().includes(q) ||
+        item.kotaTujuan.toLowerCase().includes(q) ||
+        item.estimasiTiba.toLowerCase().includes(q)
+    );
+  }, [ongkirItems, ongkirSearch]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_LOGIKA_ONGKIR, JSON.stringify(logikaOngkirItems));
+    } catch {
+      // Ignore
+    }
+  }, [logikaOngkirItems]);
+
+  // Dropdown list kota asal & tujuan dari modal ongkir
+  const availableOrigins = useMemo(() => {
+    const list: string[] = [];
+    ongkirItems.forEach((it) => {
+      const trimmed = it.kotaAsal.trim();
+      if (trimmed && !list.includes(trimmed)) {
+        list.push(trimmed);
+      }
+    });
+    return list;
+  }, [ongkirItems]);
+
+  const availableDestinations = useMemo(() => {
+    const list: string[] = [];
+    ongkirItems
+      .filter(
+        (it) =>
+          !calcOngkirOrigin ||
+          it.kotaAsal.trim().toLowerCase() === calcOngkirOrigin.trim().toLowerCase()
+      )
+      .forEach((it) => {
+        const trimmed = it.kotaTujuan.trim();
+        if (trimmed && !list.includes(trimmed)) {
+          list.push(trimmed);
+        }
+      });
+    return list;
+  }, [ongkirItems, calcOngkirOrigin]);
+
+  // Perhitungan packing muatan kardus master 55x55x40 cm
+  const packingResult = useMemo(() => {
+    const p = parseFloat(calcOngkirP) || 0;
+    const l = parseFloat(calcOngkirL) || 0;
+    const t = parseFloat(calcOngkirT) || 0;
+    const qty = parseInt(calcOngkirQty) || 0;
+    return calculateCartonPacking(p, l, t, qty);
+  }, [calcOngkirP, calcOngkirL, calcOngkirT, calcOngkirQty]);
+
+  // Daftar layanan ekspedisi pada rute yang dipilih beserta kalkulasi biaya
+  const matchingShippingServices = useMemo(() => {
+    const origin = calcOngkirOrigin.trim().toLowerCase();
+    const dest = calcOngkirDestination.trim().toLowerCase();
+
+    const matches = ongkirItems.filter(
+      (it) =>
+        it.kotaAsal.trim().toLowerCase() === origin &&
+        it.kotaTujuan.trim().toLowerCase() === dest
+    );
+
+    const withCosts = matches.map((service) => {
+      const { biayaPerKoli, totalOngkir } = estimateShippingCost(
+        service,
+        packingResult.totalKoli
+      );
+      return {
+        service,
+        biayaPerKoli,
+        totalOngkir,
+      };
+    });
+
+    // Urutkan dari termurah ke termahal
+    withCosts.sort((a, b) => a.totalOngkir - b.totalOngkir);
+
+    return withCosts;
+  }, [ongkirItems, calcOngkirOrigin, calcOngkirDestination, packingResult.totalKoli]);
+
+  // Service aktif (default otomatis service termurah)
+  const activeSelectedServiceOption = useMemo(() => {
+    if (matchingShippingServices.length === 0) return null;
+    if (selectedShippingServiceId) {
+      const found = matchingShippingServices.find(
+        (opt) => opt.service.id === selectedShippingServiceId
+      );
+      if (found) return found;
+    }
+    return matchingShippingServices[0];
+  }, [matchingShippingServices, selectedShippingServiceId]);
+
+  const handleSyncFromBoxCalc = () => {
+    if (calcP && calcP !== '0') setCalcOngkirP(calcP);
+    if (calcL && calcL !== '0') setCalcOngkirL(calcL);
+    if (calcT && calcT !== '0') setCalcOngkirT(calcT);
+    if (calcQty && calcQty !== '0') setCalcOngkirQty(calcQty);
+  };
+
   // Handlers: Ketentuan Logika (Logika Model, Logika Mesin, Logika Harga)
   const openAddLogicModal = () => {
     setEditingLogicId(null);
@@ -921,6 +1103,8 @@ export default function App() {
       setLogikaProsesItems((prev) => updateList(prev, 'lp'));
     } else if (activeLogicTab === 'logika-harga') {
       setLogikaHargaItems((prev) => updateList(prev, 'lh'));
+    } else if (activeLogicTab === 'logika-ongkir') {
+      setLogikaOngkirItems((prev) => updateList(prev, 'lo'));
     }
 
     setIsLogicModalOpen(false);
@@ -935,6 +1119,8 @@ export default function App() {
       setLogikaProsesItems((prev) => prev.filter((it) => it.id !== id));
     } else if (activeLogicTab === 'logika-harga') {
       setLogikaHargaItems((prev) => prev.filter((it) => it.id !== id));
+    } else if (activeLogicTab === 'logika-ongkir') {
+      setLogikaOngkirItems((prev) => prev.filter((it) => it.id !== id));
     }
     setDeleteLogicConfirmId(null);
   };
@@ -1338,6 +1524,106 @@ export default function App() {
     setDeleteFormulaConfirmId(null);
   };
 
+  // Handlers: Modal Ongkir
+  const openAddOngkirModal = () => {
+    setEditingOngkir(null);
+    setFormService('');
+    setFormKotaAsal('');
+    setFormKotaTujuan('');
+    setFormEstimasiTiba('');
+    setFormHargaPerKg('');
+    setFormMinimumHarga('');
+    setOngkirFormError('');
+    setIsOngkirModalOpen(true);
+  };
+
+  const openEditOngkirModal = (item: ShippingRateItem) => {
+    setEditingOngkir(item);
+    setFormService(item.service);
+    setFormKotaAsal(item.kotaAsal);
+    setFormKotaTujuan(item.kotaTujuan);
+    setFormEstimasiTiba(item.estimasiTiba);
+    setFormHargaPerKg(String(item.hargaPerKg));
+    setFormMinimumHarga(String(item.minimumHarga));
+    setOngkirFormError('');
+    setIsOngkirModalOpen(true);
+  };
+
+  const handleSaveOngkir = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedService = formService.trim();
+    const trimmedAsal = formKotaAsal.trim();
+    const trimmedTujuan = formKotaTujuan.trim();
+    const trimmedEstimasi = formEstimasiTiba.trim();
+    const hargaPerKgVal = Number(formHargaPerKg);
+    const minHargaVal = Number(formMinimumHarga);
+
+    if (!trimmedService) {
+      setOngkirFormError('Nama Service Kurir wajib diisi.');
+      return;
+    }
+    if (!trimmedAsal) {
+      setOngkirFormError('Kota Asal wajib diisi.');
+      return;
+    }
+    if (!trimmedTujuan) {
+      setOngkirFormError('Kota Tujuan wajib diisi.');
+      return;
+    }
+    if (!trimmedEstimasi) {
+      setOngkirFormError('Estimasi Tiba wajib diisi.');
+      return;
+    }
+    if (Number.isNaN(hargaPerKgVal) || hargaPerKgVal < 0) {
+      setOngkirFormError('Harga Perkg harus berupa angka valid (>= 0).');
+      return;
+    }
+    if (Number.isNaN(minHargaVal) || minHargaVal < 0) {
+      setOngkirFormError('Minimum Harga harus berupa angka valid (>= 0).');
+      return;
+    }
+
+    const maxHargaVal = calculateMaxOngkir(hargaPerKgVal, minHargaVal);
+
+    if (editingOngkir) {
+      setOngkirItems((prev) =>
+        prev.map((it) =>
+          it.id === editingOngkir.id
+            ? {
+                ...it,
+                service: trimmedService,
+                kotaAsal: trimmedAsal,
+                kotaTujuan: trimmedTujuan,
+                estimasiTiba: trimmedEstimasi,
+                hargaPerKg: hargaPerKgVal,
+                minimumHarga: minHargaVal,
+                maximumHarga: maxHargaVal,
+              }
+            : it
+        )
+      );
+    } else {
+      const newItem: ShippingRateItem = {
+        id: 'ongkir-' + Date.now(),
+        service: trimmedService,
+        kotaAsal: trimmedAsal,
+        kotaTujuan: trimmedTujuan,
+        estimasiTiba: trimmedEstimasi,
+        hargaPerKg: hargaPerKgVal,
+        minimumHarga: minHargaVal,
+        maximumHarga: maxHargaVal,
+      };
+      setOngkirItems((prev) => [...prev, newItem]);
+    }
+
+    setIsOngkirModalOpen(false);
+  };
+
+  const handleDeleteOngkir = (id: string) => {
+    setOngkirItems((prev) => prev.filter((item) => item.id !== id));
+    setDeleteOngkirConfirmId(null);
+  };
+
   const handleResetCurrentMenu = () => {
     if (activeMenu === 'data-bahan') {
       if (activeMaterialTab === 'bahan-dasar') setBahanDasarItems(INITIAL_BAHAN_DASAR_DATA);
@@ -1359,11 +1645,16 @@ export default function App() {
       setFormulaItems(INITIAL_FORMULA_DATA);
       setFormulaSearch('');
       setDeleteFormulaConfirmId(null);
+    } else if (activeMenu === 'modal-ongkir') {
+      setOngkirItems(INITIAL_ONGKIR_DATA);
+      setOngkirSearch('');
+      setDeleteOngkirConfirmId(null);
     } else if (activeMenu === 'ketentuan-logika') {
       if (activeLogicTab === 'logika-model') setLogikaModelItems(INITIAL_LOGIKA_MODEL_DATA);
       if (activeLogicTab === 'logika-mesin') setLogikaMesinItems(INITIAL_LOGIKA_MESIN_DATA);
       if (activeLogicTab === 'logika-proses') setLogikaProsesItems(INITIAL_LOGIKA_PROSES_DATA);
       if (activeLogicTab === 'logika-harga') setLogikaHargaItems(INITIAL_LOGIKA_HARGA_DATA);
+      if (activeLogicTab === 'logika-ongkir') setLogikaOngkirItems(INITIAL_LOGIKA_ONGKIR_DATA);
       setDeleteLogicConfirmId(null);
     }
   };
@@ -3953,7 +4244,9 @@ export default function App() {
                     ? logikaMesinItems
                     : activeLogicTab === 'logika-proses'
                     ? logikaProsesItems
-                    : logikaHargaItems;
+                    : activeLogicTab === 'logika-harga'
+                    ? logikaHargaItems
+                    : logikaOngkirItems;
 
                 const TabIcon = currentLogicTabObj.icon;
                 const subtitleText =
@@ -3963,7 +4256,9 @@ export default function App() {
                     ? 'Aturan logika seputar cetak, mesin Digital A3+, serta mesin Offset (Mesin 52 & Mesin 58)'
                     : activeLogicTab === 'logika-proses'
                     ? 'Aturan logika seputar proses produksi lanjutan seperti Laminasi (Digital vs Offset), Logo (Std vs Custom), dan Pisau Pond'
-                    : 'Aturan perhitungan HPP (Harga Modal), margin keuntungan, tier kuantitas, dan pembulatan Harga Jual';
+                    : activeLogicTab === 'logika-harga'
+                    ? 'Aturan perhitungan HPP (Harga Modal), margin keuntungan, tier kuantitas, dan pembulatan Harga Jual'
+                    : 'Aturan ukuran kardus master 55x55x40 cm, kalkulasi muatan koli, berat volumetrik, dan rekomendasi ongkir termurah';
 
                 return (
                   <div className="space-y-4">
@@ -4062,6 +4357,61 @@ export default function App() {
                             <strong className="text-[#F4F1EA]">Margin (%)</strong> dari Qty pesanan (dengan interpolasi sesuai rentang di atas), lalu mengambil nilai{' '}
                             <strong className="text-[#F4F1EA]">Pengali</strong> untuk menghitung{' '}
                             <strong className="text-[#F3D77D]">Harga Jual = Harga Modal x Pengali</strong>.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {activeLogicTab === 'logika-ongkir' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        <div className="rounded-xl border border-[#D4AF37]/30 bg-[#0C2017] p-4 shadow-md">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-[#8FA599] uppercase tracking-wider">
+                              Kardus Master Workshop
+                            </span>
+                            <span className="rounded bg-[#D4AF37]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#E5C158]">
+                              Standar
+                            </span>
+                          </div>
+                          <div className="mt-1.5 font-mono-tabular text-xl font-bold text-[#E5C158]">
+                            55 x 55 x 40 cm
+                          </div>
+                          <div className="text-[11px] text-[#A7BBB0] mt-1">
+                            Volume: 121.000 cm³ | Standar Koli
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-[#D4AF37]/30 bg-[#0C2017] p-4 shadow-md">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-[#8FA599] uppercase tracking-wider">
+                              Berat Volumetrik Kargo
+                            </span>
+                            <span className="rounded bg-[#D4AF37]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#F3D77D]">
+                              Kargo
+                            </span>
+                          </div>
+                          <div className="mt-1.5 font-mono-tabular text-xl font-bold text-[#F3D77D]">
+                            30.25 kg / koli
+                          </div>
+                          <div className="text-[11px] text-[#A7BBB0] mt-1">
+                            Rumus: (55 x 55 x 40) ÷ 4.000
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-[#D4AF37]/30 bg-[#0C2017] p-4 shadow-md">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-[#8FA599] uppercase tracking-wider">
+                              Rumus Maximum Harga
+                            </span>
+                            <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                              Otomatis
+                            </span>
+                          </div>
+                          <div className="mt-1.5 font-mono-tabular text-sm font-bold text-emerald-400">
+                            ((25 - 10) x Harga/kg) + Min
+                          </div>
+                          <div className="text-[11px] text-[#8FA599] mt-1">
+                            Terhubung ke Kalkulator Hitung Ongkir
                           </div>
                         </div>
                       </div>
@@ -4233,35 +4583,696 @@ export default function App() {
                 );
               })()}
             </div>
+          ) : activeMenu === 'modal-ongkir' ? (
+            /* Modal Ongkir View - Database Tarif Ekspedisi */
+            <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-3.5 sm:p-5 shadow-lg">
+              {/* Section Header */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-3.5 sm:pb-4 border-b border-[#D4AF37]/15">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-[#D4AF37] shrink-0" />
+                    <h1 className="text-sm sm:text-base font-bold text-[#E5C158] tracking-tight">
+                      Tabel Modal Ongkir
+                    </h1>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-[#8FA599]">
+                    Database tarif ekspedisi dan ongkos kirim (Service, Kota Asal, Kota Tujuan, Estimasi, Harga Perkg, Minimum Harga)
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="relative flex-1 sm:flex-initial">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8FA599]" />
+                    <input
+                      type="text"
+                      value={ongkirSearch}
+                      onChange={(e) => setOngkirSearch(e.target.value)}
+                      placeholder="Cari service / kota..."
+                      className="w-full sm:w-48 rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-8 pr-2.5 py-1.5 text-xs text-[#F4F1EA] placeholder-[#6E8478] focus:border-[#D4AF37] focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={openAddOngkirModal}
+                    className="flex items-center justify-center gap-1.5 rounded-lg bg-[#D4AF37] px-3 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+                  >
+                    <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                    <span>Tambah Modal Ongkir</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Table Modal Ongkir */}
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="border-b border-[#D4AF37]/15 bg-[#081610] text-[11px] font-semibold text-[#94A89B]">
+                      <th className="py-2.5 pl-3 pr-3 rounded-tl-lg w-[18%]">
+                        Service
+                      </th>
+                      <th className="py-2.5 px-3 w-[14%]">
+                        Kota Asal
+                      </th>
+                      <th className="py-2.5 px-3 w-[14%]">
+                        Kota Tujuan
+                      </th>
+                      <th className="py-2.5 px-3 text-center w-[12%]">
+                        Estimasi Tiba
+                      </th>
+                      <th className="py-2.5 px-3 text-center w-[13%]">
+                        Harga Perkg
+                      </th>
+                      <th className="py-2.5 px-3 text-center w-[13%]">
+                        Minimum Harga
+                      </th>
+                      <th className="py-2.5 px-3 text-center w-[14%]">
+                        Maximum Harga
+                      </th>
+                      <th className="py-2.5 pl-3 pr-3 text-right rounded-tr-lg w-[8%]">
+                        Aksi
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#D4AF37]/15 text-xs">
+                    {filteredOngkirItems.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="py-12 text-center text-xs text-[#8FA599]"
+                        >
+                          <div className="flex flex-col items-center justify-center">
+                            <Truck className="h-8 w-8 text-[#D4AF37]/40 mb-2" />
+                            <p className="font-medium text-[#F4F1EA]">
+                              Tidak ada data modal ongkir yang ditemukan.
+                            </p>
+                            <p className="text-[11px] text-[#8FA599] mt-0.5">
+                              Silakan tambah data baru menggunakan tombol di kanan atas.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredOngkirItems.map((item) => (
+                        <tr
+                          key={item.id}
+                          className="group hover:bg-[#10291E]/70 transition-colors"
+                        >
+                          {/* 1. Service */}
+                          <td className="py-3 pl-3 pr-3 align-middle">
+                            <button
+                              onClick={() => openEditOngkirModal(item)}
+                              className="text-left font-bold text-[#E5C158] hover:text-[#F5D77F] hover:underline transition-colors cursor-pointer text-xs"
+                              title="Klik untuk ubah data ongkir"
+                            >
+                              {item.service}
+                            </button>
+                          </td>
+
+                          {/* 2. Kota Asal */}
+                          <td className="py-3 px-3 align-middle font-medium text-[#E2ECE6]">
+                            {item.kotaAsal}
+                          </td>
+
+                          {/* 3. Kota Tujuan */}
+                          <td className="py-3 px-3 align-middle font-medium text-[#E2ECE6]">
+                            {item.kotaTujuan}
+                          </td>
+
+                          {/* 4. Estimasi Tiba */}
+                          <td className="py-3 px-3 align-middle text-center">
+                            <span className="inline-block rounded-md border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1 text-[11px] font-semibold text-[#F3D77D]">
+                              {item.estimasiTiba}
+                            </span>
+                          </td>
+
+                          {/* 5. Harga Perkg */}
+                          <td className="py-3 px-3 align-middle text-center font-mono-tabular text-xs font-semibold text-[#F4F1EA]">
+                            {formatRupiah(item.hargaPerKg)}
+                            <span className="text-[10px] text-[#8FA599] font-normal ml-1">/ kg</span>
+                          </td>
+
+                          {/* 6. Minimum Harga */}
+                          <td className="py-3 px-3 align-middle text-center font-mono-tabular text-xs font-semibold text-emerald-400">
+                            {formatRupiah(item.minimumHarga)}
+                          </td>
+
+                          {/* 7. Maximum Harga (Otomatis: ((25-10) x Harga/kg) + Minimum Harga) */}
+                          <td className="py-3 px-3 align-middle text-center font-mono-tabular text-xs font-semibold text-[#E5C158]">
+                            {formatRupiah(
+                              item.maximumHarga ??
+                                calculateMaxOngkir(item.hargaPerKg, item.minimumHarga)
+                            )}
+                          </td>
+
+                          {/* 8. Aksi */}
+                          <td className="py-3 pl-3 pr-3 align-middle text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => openEditOngkirModal(item)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4AF37]/20 bg-[#081610] text-[#D4AF37] hover:bg-[#163528] hover:border-[#D4AF37]/50 transition-colors cursor-pointer"
+                                title={`Ubah ${item.service}`}
+                                aria-label={`Ubah ${item.service}`}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+
+                              {deleteOngkirConfirmId === item.id ? (
+                                <button
+                                  onClick={() => handleDeleteOngkir(item.id)}
+                                  className="inline-flex items-center justify-center rounded-md bg-[#E11D48] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#BE123C] transition-colors cursor-pointer whitespace-nowrap"
+                                  title="Konfirmasi Hapus"
+                                >
+                                  Hapus?
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteOngkirConfirmId(item.id)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#F43F5E]/25 bg-[#2A1216] text-[#F43F5E] hover:bg-[#3F1920] hover:border-[#F43F5E]/50 transition-colors cursor-pointer"
+                                  title={`Hapus ${item.service}`}
+                                  aria-label={`Hapus ${item.service}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : activeMenu === 'hitung-ongkir' ? (
+            /* Kalkulator Hitung Ongkir */
+            <div className="space-y-4">
+              {/* Header Banner */}
+              <div className="rounded-xl border border-[#D4AF37]/30 bg-[#0C2017] p-4 sm:p-5 shadow-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37]">
+                      <Truck className="h-4 w-4" />
+                    </div>
+                    <h1 className="text-base sm:text-lg font-bold text-[#E5C158] tracking-tight">
+                      Kalkulator Hitung Ongkir &amp; Koli
+                    </h1>
+                  </div>
+                  <p className="text-xs text-[#8FA599] max-w-2xl">
+                    Perhitungan otomatis kebutuhan koli menggunakan kardus master workshop (55 x 55 x 40 cm), estimasi volumetrik, serta perbandingan tarif ekspedisi termurah dari database Modal Ongkir.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSelectMenu('modal-ongkir')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-3 py-1.5 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
+                  >
+                    <Truck className="h-3.5 w-3.5 text-[#D4AF37]" />
+                    <span>Data Modal Ongkir</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSelectMenu('ketentuan-logika');
+                      setActiveLogicTab('logika-ongkir');
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-1.5 text-xs font-semibold text-[#A7BBB0] hover:text-[#E5C158] hover:bg-[#122D22] transition-colors cursor-pointer"
+                  >
+                    <Lightbulb className="h-3.5 w-3.5 text-[#D4AF37]" />
+                    <span>Logika Ongkir</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2 Card Kiri - Kanan Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+                {/* KOLOM KIRI (Input Data & Card Tambahan Kardus Master) */}
+                <div className="lg:col-span-5 space-y-4">
+                  {/* CARD 1 KIRI: Penginputan Data */}
+                  <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-4 sm:p-5 shadow-lg space-y-4">
+                    <div className="flex items-center justify-between border-b border-[#D4AF37]/15 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="h-4 w-4 text-[#D4AF37]" />
+                        <h2 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
+                          Input Data Pengiriman
+                        </h2>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSyncFromBoxCalc}
+                        className="text-[11px] font-semibold text-[#D4AF37] hover:text-[#E5C158] hover:underline transition-colors cursor-pointer"
+                        title="Ambil P, L, T, dan Qty dari Kalkulator Hardbox"
+                      >
+                        Salin dari Hardbox
+                      </button>
+                    </div>
+
+                    {/* Baris Pertama: Dropdown Kota Asal & Kota Tujuan */}
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-[#D4AF37]" />
+                            <span>Kota Asal</span>
+                          </label>
+                          <select
+                            value={calcOngkirOrigin}
+                            onChange={(e) => {
+                              setCalcOngkirOrigin(e.target.value);
+                              setSelectedShippingServiceId(null);
+                            }}
+                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                          >
+                            {availableOrigins.length === 0 ? (
+                              <option value="">Belum ada data kota asal</option>
+                            ) : (
+                              availableOrigins.map((kota) => (
+                                <option key={kota} value={kota}>
+                                  {kota}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="flex items-center gap-1.5 text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+                            <span>Kota Tujuan</span>
+                          </label>
+                          <select
+                            value={calcOngkirDestination}
+                            onChange={(e) => {
+                              setCalcOngkirDestination(e.target.value);
+                              setSelectedShippingServiceId(null);
+                            }}
+                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3 py-2 text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                          >
+                            {availableDestinations.length === 0 ? (
+                              <option value="">Tidak ada rute tujuan</option>
+                            ) : (
+                              availableDestinations.map((kota) => (
+                                <option key={kota} value={kota}>
+                                  {kota}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                      </div>
+
+                      {matchingShippingServices.length === 0 && (
+                        <div className="rounded-lg border border-[#F43F5E]/30 bg-[#2A1216] p-2.5 text-[11px] text-[#FDA4AF] flex items-center justify-between">
+                          <span>Belum ada tarif untuk rute ini.</span>
+                          <button
+                            onClick={() => handleSelectMenu('modal-ongkir')}
+                            className="underline font-semibold text-[#FDA4AF] hover:text-white"
+                          >
+                            Tambah di Modal Ongkir
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Baris Kedua: Input Dimensi Box Satuan (P, L, T) dan Qty */}
+                    <div className="space-y-3 pt-2 border-t border-[#D4AF37]/10">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                          Ukuran Box Satuan (cm)
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <span className="block text-[10px] text-[#8FA599] mb-1">Panjang (P)</span>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={1}
+                                step="any"
+                                value={calcOngkirP}
+                                onChange={(e) => setCalcOngkirP(e.target.value)}
+                                placeholder="P"
+                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                              />
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="block text-[10px] text-[#8FA599] mb-1">Lebar (L)</span>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={1}
+                                step="any"
+                                value={calcOngkirL}
+                                onChange={(e) => setCalcOngkirL(e.target.value)}
+                                placeholder="L"
+                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                              />
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="block text-[10px] text-[#8FA599] mb-1">Tinggi (T)</span>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min={1}
+                                step="any"
+                                value={calcOngkirT}
+                                onChange={(e) => setCalcOngkirT(e.target.value)}
+                                placeholder="T"
+                                className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-2.5 py-1.5 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none text-center"
+                              />
+                              <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-[#6E8478]">cm</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                          Jumlah Box Pesanan (Qty)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={calcOngkirQty}
+                            onChange={(e) => setCalcOngkirQty(e.target.value)}
+                            placeholder="Contoh: 100"
+                            className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] pl-3 pr-12 py-2 font-mono-tabular text-xs text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-[#8FA599]">
+                            pcs
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* CARD TAMBAHAN DI BAWAH CARD KIRI: Kardus yang Kita Punya (55 x 55 x 40) */}
+                  <section className="rounded-xl border border-[#D4AF37]/35 bg-[#122D22]/80 p-4 sm:p-5 shadow-lg space-y-3 relative overflow-hidden">
+                    <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none">
+                      <Box className="w-36 h-36 text-[#D4AF37]" />
+                    </div>
+
+                    <div className="flex items-center justify-between border-b border-[#D4AF37]/20 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-[#D4AF37]" />
+                        <h3 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
+                          Kardus Master yang Kita Punya
+                        </h3>
+                      </div>
+                      <span className="rounded bg-[#D4AF37]/15 border border-[#D4AF37]/30 px-2 py-0.5 text-[10px] font-bold text-[#F3D77D]">
+                        Standar Workshop
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-baseline justify-between rounded-lg border border-[#D4AF37]/25 bg-[#081610] p-3">
+                        <span className="text-xs text-[#B8C7BE] font-medium">Ukuran Kardus:</span>
+                        <div className="font-mono-tabular text-base sm:text-lg font-bold text-[#E5C158]">
+                          55 x 55 x 40 <span className="text-xs text-[#8FA599] font-normal">cm</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-lg border border-[#D4AF37]/15 bg-[#081610]/70 p-2.5 space-y-0.5">
+                          <span className="text-[10px] text-[#8FA599] block">Volume Master:</span>
+                          <span className="font-mono-tabular text-xs font-semibold text-[#F4F1EA]">
+                            121.000 cm³
+                          </span>
+                        </div>
+
+                        <div className="rounded-lg border border-[#D4AF37]/15 bg-[#081610]/70 p-2.5 space-y-0.5">
+                          <span className="text-[10px] text-[#8FA599] block">Berat Volumetrik:</span>
+                          <span className="font-mono-tabular text-xs font-semibold text-[#F4F1EA]">
+                            30.25 kg / koli
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="text-[11px] text-[#8FA599] leading-relaxed pt-1">
+                        Sistem membaca kardus master <strong className="text-[#F4F1EA]">55 x 55 x 40 cm</strong> ini untuk menghitung kapasitas muatan per koli dan menentukan total koli yang dibutuhkan secara otomatis.
+                      </p>
+                    </div>
+                  </section>
+                </div>
+
+                {/* KOLOM KANAN (Rincian Biaya Ongkir, Jumlah Koli, & Rekomendasi Service) */}
+                <div className="lg:col-span-7 space-y-4">
+                  {/* CARD 1 KANAN: Rincian Biaya Ongkir & Jumlah Koli */}
+                  <section className="rounded-xl border border-[#D4AF37]/30 bg-[#0C2017] p-4 sm:p-5 shadow-lg space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-[#D4AF37]/15 gap-2">
+                      <div className="flex items-center gap-2">
+                        <Truck className="h-4 w-4 text-[#D4AF37]" />
+                        <h2 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
+                          Rincian Biaya Ongkir &amp; Jumlah Koli
+                        </h2>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-mono-tabular">
+                        <span className="text-[#8FA599]">{calcOngkirOrigin || '-'}</span>
+                        <ArrowRight className="h-3 w-3 text-[#D4AF37]" />
+                        <span className="text-[#E5C158] font-bold">{calcOngkirDestination || '-'}</span>
+                      </div>
+                    </div>
+
+                    {/* Stat Highlights: 3 Kolom */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Box 1: Jumlah Koli */}
+                      <div className="rounded-xl border border-[#D4AF37]/30 bg-[#122D22] p-3.5 space-y-1">
+                        <span className="text-[10px] font-semibold text-[#8FA599] uppercase tracking-wider block">
+                          Jumlah Koli
+                        </span>
+                        <div className="font-mono-tabular text-2xl font-bold text-[#E5C158]">
+                          {packingResult.totalKoli}{' '}
+                          <span className="text-xs font-normal text-[#B8C7BE]">Koli</span>
+                        </div>
+                        <p className="text-[10.5px] text-[#A7BBB0]">
+                          1 koli muat <strong className="text-[#F4F1EA]">{packingResult.pcsPerCarton}</strong> pcs
+                        </p>
+                      </div>
+
+                      {/* Box 2: Estimasi Berat Total */}
+                      <div className="rounded-xl border border-[#D4AF37]/30 bg-[#122D22] p-3.5 space-y-1">
+                        <span className="text-[10px] font-semibold text-[#8FA599] uppercase tracking-wider block">
+                          Total Berat Kargo
+                        </span>
+                        <div className="font-mono-tabular text-2xl font-bold text-[#F3D77D]">
+                          {packingResult.totalWeightKg.toFixed(1)}{' '}
+                          <span className="text-xs font-normal text-[#B8C7BE]">kg</span>
+                        </div>
+                        <p className="text-[10.5px] text-[#A7BBB0]">
+                          ~{packingResult.weightPerKoliKg} kg per kardus
+                        </p>
+                      </div>
+
+                      {/* Box 3: Total Biaya Ongkir */}
+                      <div className="rounded-xl border border-emerald-500/35 bg-[#122D22] p-3.5 space-y-1">
+                        <span className="text-[10px] font-semibold text-emerald-400/80 uppercase tracking-wider block">
+                          Total Estimasi Ongkir
+                        </span>
+                        <div className="font-mono-tabular text-xl sm:text-2xl font-bold text-emerald-400">
+                          {formatRupiah(activeSelectedServiceOption?.totalOngkir || 0)}
+                        </div>
+                        <p className="text-[10.5px] text-[#A7BBB0]">
+                          {formatRupiah(activeSelectedServiceOption?.biayaPerKoli || 0)} / koli
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Breakdown Detail Perhitungan */}
+                    <div className="rounded-lg border border-[#D4AF37]/15 bg-[#081610] p-3.5 space-y-2.5 text-xs">
+                      <div className="text-[11px] font-bold text-[#E5C158] border-b border-[#D4AF37]/10 pb-1.5 flex items-center justify-between">
+                        <span>Detail Parameter Kardus &amp; Susunan:</span>
+                        <span className="font-mono-tabular text-[#8FA599]">
+                          Qty: {calcOngkirQty} pcs
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-[#8FA599]">Volume 1 Pcs Box:</span>{' '}
+                          <strong className="text-[#F4F1EA] font-mono-tabular">
+                            {packingResult.boxVolumeCm3.toLocaleString('id-ID')} cm³
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[#8FA599]">Volume Kardus Master:</span>{' '}
+                          <strong className="text-[#F4F1EA] font-mono-tabular">
+                            {packingResult.masterVolumeCm3.toLocaleString('id-ID')} cm³
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[#8FA599]">Orientasi Muatan:</span>{' '}
+                          <span className="text-[#F3D77D] font-mono-tabular">
+                            {packingResult.arrangementLabel}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[#8FA599]">Komposisi Koli:</span>{' '}
+                          <span className="text-[#F4F1EA] font-mono-tabular">
+                            {packingResult.fullCartons} koli penuh
+                            {packingResult.lastCartonPcs !== packingResult.pcsPerCarton && packingResult.fullCartons > 0
+                              ? ` + 1 koli isi ${packingResult.lastCartonPcs} pcs`
+                              : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      {activeSelectedServiceOption && (
+                        <div className="border-t border-[#D4AF37]/15 pt-2.5 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[#8FA599]">Layanan Aktif:</span>
+                            <strong className="text-[#E5C158]">
+                              {activeSelectedServiceOption.service.service}
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[#8FA599]">Rumus Hitung Ongkir:</span>
+                            <span className="font-mono-tabular text-[#B8C7BE]">
+                              {packingResult.totalKoli} koli x {formatRupiah(activeSelectedServiceOption.biayaPerKoli)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* CARD 2 KANAN (Di Bawahnya): Rekomendasi Pilihan Service / Layanan */}
+                  <section className="rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-4 sm:p-5 shadow-lg space-y-3.5">
+                    <div className="flex items-center justify-between border-b border-[#D4AF37]/15 pb-3">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <Award className="h-4 w-4 text-[#D4AF37]" />
+                          <h3 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
+                            Rekomendasi Pilihan Service / Ekspedisi
+                          </h3>
+                        </div>
+                        <p className="text-[11px] text-[#8FA599]">
+                          Pilihan layanan yang tersedia untuk rute {calcOngkirOrigin} ➔ {calcOngkirDestination}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#122D22] border border-[#D4AF37]/30 px-2.5 py-0.5 font-mono-tabular text-[11px] text-[#F3D77D]">
+                        {matchingShippingServices.length} Opsi
+                      </span>
+                    </div>
+
+                    {matchingShippingServices.length === 0 ? (
+                      <div className="rounded-xl border border-[#D4AF37]/20 bg-[#081610] p-6 text-center space-y-2">
+                        <Truck className="h-7 w-7 text-[#D4AF37]/40 mx-auto" />
+                        <div className="text-xs font-semibold text-[#F4F1EA]">
+                          Tidak ada service yang terdaftar untuk rute ini
+                        </div>
+                        <p className="text-[11px] text-[#8FA599] max-w-sm mx-auto">
+                          Silakan tambahkan data tarif baru pada menu Modal Ongkir untuk menghubungkannya ke kalkulator ini.
+                        </p>
+                        <button
+                          onClick={() => handleSelectMenu('modal-ongkir')}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#D4AF37] px-3.5 py-1.5 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+                          <span>Tambah Tarif di Modal Ongkir</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {matchingShippingServices.map((opt, idx) => {
+                          const isSelected =
+                            activeSelectedServiceOption?.service.id === opt.service.id;
+                          const isCheapest = idx === 0;
+
+                          return (
+                            <div
+                              key={opt.service.id}
+                              onClick={() => setSelectedShippingServiceId(opt.service.id)}
+                              className={`rounded-xl border p-3.5 transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+                                isSelected
+                                  ? 'border-[#D4AF37] bg-[#122D22] shadow-md ring-1 ring-[#D4AF37]/40'
+                                  : 'border-[#D4AF37]/20 bg-[#081610] hover:border-[#D4AF37]/50 hover:bg-[#10291E]'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-xs sm:text-sm text-[#F4F1EA]">
+                                    {opt.service.service}
+                                  </span>
+
+                                  {isCheapest && (
+                                    <span className="inline-flex items-center gap-1 rounded bg-[#D4AF37] px-2 py-0.5 text-[9.5px] font-bold text-[#07140F] uppercase tracking-wide">
+                                      <Award className="h-3 w-3" />
+                                      Rekomendasi Termurah
+                                    </span>
+                                  )}
+
+                                  <span className="rounded border border-[#D4AF37]/25 bg-[#081610] px-2 py-0.5 text-[10px] text-[#A7BBB0]">
+                                    {opt.service.estimasiTiba}
+                                  </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#8FA599]">
+                                  <span>
+                                    Tarif: <strong className="text-[#F4F1EA]">{formatRupiah(opt.service.hargaPerKg)}/kg</strong>
+                                  </span>
+                                  <span>•</span>
+                                  <span>
+                                    Min: <strong className="text-[#F4F1EA]">{formatRupiah(opt.service.minimumHarga)}</strong>
+                                  </span>
+                                  <span>•</span>
+                                  <span>
+                                    Max (Batas 25kg): <strong className="text-[#F3D77D]">{formatRupiah(opt.service.maximumHarga || 0)}</strong>
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#D4AF37]/10">
+                                <div className="text-left sm:text-right">
+                                  <div className="text-[10px] text-[#8FA599]">
+                                    {formatRupiah(opt.biayaPerKoli)} x {packingResult.totalKoli} koli
+                                  </div>
+                                  <div className="font-mono-tabular text-sm sm:text-base font-bold text-emerald-400">
+                                    {formatRupiah(opt.totalOngkir)}
+                                  </div>
+                                </div>
+
+                                <div
+                                  className={`flex h-6 w-6 items-center justify-center rounded-full border transition-colors ${
+                                    isSelected
+                                      ? 'border-[#D4AF37] bg-[#D4AF37] text-[#07140F]'
+                                      : 'border-[#D4AF37]/40 bg-transparent text-transparent'
+                                  }`}
+                                >
+                                  <Check className="h-3.5 w-3.5 stroke-[3]" />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
+            </div>
           ) : (
             /* Centered Maintenance State for all other menus */
             <section className="flex min-h-[400px] flex-col items-center justify-center rounded-xl border border-[#D4AF37]/25 bg-[#0C2017] p-6 text-center shadow-lg">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#D4AF37]/35 bg-[#122D22] text-[#D4AF37] shadow-inner mb-4">
-                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir' ? (
-                  <Truck className="h-6 w-6" />
-                ) : (
-                  <Construction className="h-6 w-6" />
-                )}
+                <Construction className="h-6 w-6" />
               </div>
 
               <h1 className="font-display text-lg sm:text-xl font-bold tracking-wide text-[#E5C158] uppercase">
-                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir'
-                  ? 'HALAMAN KOSONG'
-                  : 'MAINTENANCE'}
+                MAINTENANCE
               </h1>
 
               <p className="mt-1.5 text-xs sm:text-sm font-medium text-[#F4F1EA]">
-                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir' ? (
-                  <>Menu <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang disiapkan</>
-                ) : (
-                  <>Modul <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang dalam pemeliharaan</>
-                )}
+                Modul <span className="text-[#E5C158]">{currentMenuObj.label}</span> sedang dalam pemeliharaan
               </p>
 
               <p className="mt-1 max-w-md text-[11px] sm:text-xs text-[#8FA599] leading-relaxed">
-                {activeMenu === 'hitung-ongkir' || activeMenu === 'modal-ongkir'
-                  ? 'Halaman ini masih dikosongkan sementara sesuai permintaan dan siap untuk integrasi perhitungan serta tarif ongkos kirim.'
-                  : 'Data pada menu ini sengaja dikosongkan sementara. Silakan buka grup Modal Kalkulator di sidebar sebelah kiri untuk melihat Data Proses, Biaya Finishing, atau Rumus Model.'}
+                Data pada menu ini sengaja dikosongkan sementara. Silakan buka grup Kalkulator (Hardbox, Hitung Ongkir) atau grup Modal Kalkulator (Data Bahan, Data Proses, Biaya Finishing, Rumus Model, Modal Ongkir).
               </p>
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
@@ -4273,18 +5284,25 @@ export default function App() {
                   <span>Buka Kalkulator Hardbox</span>
                 </button>
                 <button
+                  onClick={() => handleSelectMenu('hitung-ongkir')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
+                >
+                  <Truck className="h-3.5 w-3.5 text-[#D4AF37]" />
+                  <span>Buka Hitung Ongkir</span>
+                </button>
+                <button
+                  onClick={() => handleSelectMenu('modal-ongkir')}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
+                >
+                  <Truck className="h-3.5 w-3.5 text-[#D4AF37]" />
+                  <span>Buka Modal Ongkir</span>
+                </button>
+                <button
                   onClick={() => handleSelectMenu('data-proses')}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
                 >
                   <Printer className="h-3.5 w-3.5 text-[#D4AF37]" />
                   <span>Buka Data Proses</span>
-                </button>
-                <button
-                  onClick={() => handleSelectMenu('rumus-model')}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/35 bg-[#122D22] px-4 py-2 text-xs font-semibold text-[#F3D77D] hover:bg-[#193B2D] transition-colors cursor-pointer"
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-[#D4AF37]" />
-                  <span>Buka Rumus Model</span>
                 </button>
               </div>
             </section>
@@ -4937,6 +5955,178 @@ export default function App() {
                   className="rounded-lg bg-[#D4AF37] px-5 py-2 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer"
                 >
                   Simpan Rumus
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah / Ubah Modal Ongkir */}
+      {isOngkirModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
+          onClick={() => setIsOngkirModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-[#D4AF37]/35 bg-[#0C2017] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[#D4AF37]/15 pb-4">
+              <div className="flex items-center gap-2.5">
+                <Truck className="h-5 w-5 text-[#D4AF37]" />
+                <h2 className="text-base sm:text-lg font-bold text-[#E5C158]">
+                  {editingOngkir ? 'Ubah Modal Ongkir' : 'Tambah Modal Ongkir'}
+                </h2>
+              </div>
+              <button
+                onClick={() => setIsOngkirModalOpen(false)}
+                className="rounded-lg p-1.5 text-[#8FA599] hover:bg-[#122D22] hover:text-[#F4F1EA] transition-colors cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOngkir} className="mt-5 space-y-4">
+              {ongkirFormError && (
+                <div className="rounded-lg border border-[#F43F5E]/40 bg-[#2A1216] px-3.5 py-2.5 text-xs text-[#FDA4AF]">
+                  {ongkirFormError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                  Service Kurir
+                </label>
+                <input
+                  type="text"
+                  value={formService}
+                  onChange={(e) => setFormService(e.target.value)}
+                  placeholder="Contoh: Paxel Big, JNE Trucking, SiCepat Cargo"
+                  className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 text-sm text-[#F4F1EA] placeholder-[#5E7468] focus:border-[#D4AF37] focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                    Kota Asal
+                  </label>
+                  <input
+                    type="text"
+                    value={formKotaAsal}
+                    onChange={(e) => setFormKotaAsal(e.target.value)}
+                    placeholder="Contoh: Bandung"
+                    className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 text-sm text-[#F4F1EA] placeholder-[#5E7468] focus:border-[#D4AF37] focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                    Kota Tujuan
+                  </label>
+                  <input
+                    type="text"
+                    value={formKotaTujuan}
+                    onChange={(e) => setFormKotaTujuan(e.target.value)}
+                    placeholder="Contoh: Tangerang"
+                    className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 text-sm text-[#F4F1EA] placeholder-[#5E7468] focus:border-[#D4AF37] focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                  Estimasi Tiba
+                </label>
+                <input
+                  type="text"
+                  value={formEstimasiTiba}
+                  onChange={(e) => setFormEstimasiTiba(e.target.value)}
+                  placeholder="Contoh: 1 - 2 Hari"
+                  className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 text-sm text-[#F4F1EA] placeholder-[#5E7468] focus:border-[#D4AF37] focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                    Harga Perkg (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={100}
+                    value={formHargaPerKg}
+                    onChange={(e) => setFormHargaPerKg(e.target.value)}
+                    placeholder="Contoh: 2000"
+                    className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 font-mono-tabular text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#B8C7BE] mb-1.5">
+                    Minimum Harga (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={500}
+                    value={formMinimumHarga}
+                    onChange={(e) => setFormMinimumHarga(e.target.value)}
+                    placeholder="Contoh: 60000"
+                    className="w-full rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-3.5 py-2.5 font-mono-tabular text-sm text-[#F4F1EA] focus:border-[#D4AF37] focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Kalkulasi Otomatis: Maximum Harga */}
+              <div className="rounded-xl border border-[#D4AF37]/30 bg-[#122D22]/70 p-3.5 flex items-center justify-between shadow-sm">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-[#E5C158]">
+                      Maximum Harga (Otomatis)
+                    </span>
+                    <span className="rounded bg-[#D4AF37]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#F3D77D]">
+                      Auto
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-[#8FA599]">
+                    Rumus: <span className="font-mono text-[#D4AF37]">((25 - 10) × Harga perkg) + Minimum harga</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono-tabular text-sm sm:text-base font-bold text-[#E5C158]">
+                    {formatRupiah(
+                      calculateMaxOngkir(
+                        Number(formHargaPerKg) || 0,
+                        Number(formMinimumHarga) || 0
+                      )
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[#8FA599]">Dihitung sistem</div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#D4AF37]/15">
+                <button
+                  type="button"
+                  onClick={() => setIsOngkirModalOpen(false)}
+                  className="rounded-lg border border-[#D4AF37]/25 bg-[#081610] px-4 py-2 text-xs font-semibold text-[#B8C7BE] hover:bg-[#122D22] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#D4AF37] px-5 py-2 text-xs font-semibold text-[#07140F] hover:bg-[#E5C158] transition-colors cursor-pointer"
+                >
+                  Simpan Data Ongkir
                 </button>
               </div>
             </form>
