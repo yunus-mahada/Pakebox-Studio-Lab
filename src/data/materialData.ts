@@ -64,7 +64,7 @@ export const INITIAL_KERTAS_PREMIUM_DATA: MaterialItem[] = [
     id: 'kp-1',
     namaBahan: 'RCP',
     ukuranPlano: '109 x 79',
-    hargaLembar: 'Rp 10.700',
+    hargaLembar: 'Rp 12.000',
   },
 ];
 
@@ -74,5 +74,11 @@ export const INITIAL_INNERBOX_DATA: MaterialItem[] = [
     namaBahan: 'Busa Ati',
     ukuranPlano: '200 x 100',
     hargaLembar: 'Rp 85.000',
+  },
+  {
+    id: 'ib-2',
+    namaBahan: 'Busa Angin',
+    ukuranPlano: '150 x 110',
+    hargaLembar: 'Rp 58.000',
   },
 ];

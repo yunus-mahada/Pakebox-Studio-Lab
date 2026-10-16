@@ -179,8 +179,8 @@ const STORAGE_KEY_LAMINASI = 'pakebox_studio_process_laminasi_v3';
 const STORAGE_KEY_LOGO = 'pakebox_studio_process_logo_v2';
 const STORAGE_KEY_BAHAN_DASAR = 'pakebox_studio_material_dasar_v2';
 const STORAGE_KEY_KERTAS_STD = 'pakebox_studio_material_std_v4';
-const STORAGE_KEY_KERTAS_PREMIUM = 'pakebox_studio_material_premium_v2';
-const STORAGE_KEY_INNERBOX = 'pakebox_studio_material_innerbox_v1';
+const STORAGE_KEY_KERTAS_PREMIUM = 'pakebox_studio_material_premium_v3';
+const STORAGE_KEY_INNERBOX = 'pakebox_studio_material_innerbox_v2';
 const STORAGE_KEY_LOGIKA_MODEL = 'pakebox_studio_logic_model_v2';
 const STORAGE_KEY_LOGIKA_MESIN = 'pakebox_studio_logic_mesin_v4';
 const STORAGE_KEY_LOGIKA_PROSES = 'pakebox_studio_logic_proses_v2';
@@ -1805,9 +1805,14 @@ export default function App() {
               e.preventDefault();
               handleSelectMenu('data-proses');
             }}
-            className="font-display text-sm font-bold tracking-wider text-[#E5C158] hover:text-[#F3D77D] transition-colors whitespace-nowrap"
+            className="flex items-center gap-2.5 text-[#E5C158] hover:text-[#F3D77D] transition-colors whitespace-nowrap group"
           >
-            PAKEBOX STUDIO
+            <span className="animate-box-jump text-[#E5C158] group-hover:text-[#F3D77D] drop-shadow-[0_2px_8px_rgba(212,175,55,0.35)] transition-colors">
+              <Box className="h-5 w-5 stroke-[2.2]" />
+            </span>
+            <span className="font-bold text-[15px] tracking-tight text-[#E5C158] group-hover:text-[#F3D77D] transition-colors">
+              Pakebox Studio
+            </span>
           </a>
 
           <button
@@ -1991,7 +1996,7 @@ export default function App() {
               </button>
 
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:text-xs text-[#94A89B]">
-                <span>PAKEBOX STUDIO</span>
+                <span>Pakebox Studio</span>
                 {isChildOfKalkulator && (
                   <>
                     <span aria-hidden="true">/</span>
