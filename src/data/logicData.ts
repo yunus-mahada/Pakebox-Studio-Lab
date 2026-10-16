@@ -478,6 +478,14 @@ export const INITIAL_LOGIKA_ONGKIR_DATA: LogicRuleItem[] = [
     aksi: 'Kunci Maksimal Rp 90.000 / Koli',
   },
   {
+    id: 'lo-lintas-1',
+    namaAturan: 'Ketentuan Khusus Lintas Travel – Sistem Volumetrik, Batas Max 35 kg & Estimasi Tiba',
+    kondisiTrigger: 'Service = Lintas Travel (Rute Bandung ke Jabodetabek)',
+    rumusTindakan: 'Berat Volumetrik = (P x L x T) / 4.000 = Jumlah Kilo | Batas Max Berat: 35 kg per koli | Estimasi Tiba: 4 - 5 Jam',
+    keterangan: 'Khusus untuk Lintas Travel memiliki ketentuan: Gunakan sistem volumetrik (P x L x T : 4.000 = Jumlah kilo). Batas maksimum berat koli adalah 35 kg (Maksimal Biaya Rp 165.000/koli), dengan estimasi tiba pengiriman kurang lebih 4 - 5 jam.',
+    aksi: 'Terapkan Volumetrik 4000, Batas Max 35 kg & Estimasi 4-5 Jam',
+  },
+  {
     id: 'lo-4',
     namaAturan: 'Kalkulasi Tarif Dasar & Minimum Ongkir',
     kondisiTrigger: 'Perhitungan Biaya per Koli dari Database Modal Ongkir',

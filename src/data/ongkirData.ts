@@ -6,7 +6,8 @@ export interface ShippingRateItem {
   estimasiTiba: string;  // Estimasi Tiba (e.g. 1 - 2 Hari)
   hargaPerKg: number;    // Harga Perkg (e.g. 2000)
   minimumHarga: number;  // Minimum Harga (e.g. 60000)
-  maximumHarga?: number; // Maximum Harga otomatis: ((25 - 10) * hargaPerKg) + minimumHarga
+  maximumHarga?: number; // Maximum Harga otomatis: ((batasMaxKg - 10) * hargaPerKg) + minimumHarga
+  maxWeightKg?: number;  // Batas berat maksimum per koli (misal: Paxel Big = 25 kg, Lintas Travel = 35 kg)
 }
 
 /**
@@ -22,12 +23,18 @@ export const MASTER_CARTON = {
 
 /**
  * Rumus Maximum Harga:
- * = ((25 - 10) * Harga perkg) + Minimum harga
+ * = ((batasMaxKg - 10) * Harga perkg) + Minimum harga
+ * Default batasMaxKg = 25 kg (Paxel Big), atau 35 kg (Lintas Travel)
  */
-export const calculateMaxOngkir = (hargaPerKg: number, minimumHarga: number): number => {
+export const calculateMaxOngkir = (
+  hargaPerKg: number,
+  minimumHarga: number,
+  maxWeightKg = 25
+): number => {
   const kgRate = Number(hargaPerKg) || 0;
   const minRate = Number(minimumHarga) || 0;
-  return ((25 - 10) * kgRate) + minRate;
+  const safeMaxKg = Number(maxWeightKg) || 25;
+  return Math.max(minRate, ((safeMaxKg - 10) * kgRate) + minRate);
 };
 
 export interface PackingCalculationResult {
@@ -523,6 +530,105 @@ export const INITIAL_ONGKIR_DATA: ShippingRateItem[] = [
     hargaPerKg: 5500,
     minimumHarga: 65000,
     maximumHarga: calculateMaxOngkir(5500, 65000),
+  },
+  {
+    id: 'ongkir-36',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Jakarta Pusat',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-37',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Jakarta Selatan',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-38',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Jakarta Barat',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-39',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Jakarta Timur',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-40',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Jakarta Utara',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-41',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Tangerang',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-42',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Bogor',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-43',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Depok',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
+  },
+  {
+    id: 'ongkir-44',
+    service: 'Lintas Travel',
+    kotaAsal: 'Bandung',
+    kotaTujuan: 'Bekasi',
+    estimasiTiba: '4 - 5 Jam',
+    hargaPerKg: 5000,
+    minimumHarga: 40000,
+    maximumHarga: calculateMaxOngkir(5000, 40000, 35),
+    maxWeightKg: 35,
   },
 ];
 

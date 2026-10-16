@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   Construction,
+  Copy,
   Cpu,
   Database,
   FileText,
@@ -185,8 +186,8 @@ const STORAGE_KEY_LOGIKA_MODEL = 'pakebox_studio_logic_model_v2';
 const STORAGE_KEY_LOGIKA_MESIN = 'pakebox_studio_logic_mesin_v4';
 const STORAGE_KEY_LOGIKA_PROSES = 'pakebox_studio_logic_proses_v2';
 const STORAGE_KEY_LOGIKA_HARGA = 'pakebox_studio_logic_harga_v2';
-const STORAGE_KEY_LOGIKA_ONGKIR = 'pakebox_studio_logic_ongkir_v1';
-const STORAGE_KEY_ONGKIR = 'pakebox_studio_ongkir_v1';
+const STORAGE_KEY_LOGIKA_ONGKIR = 'pakebox_studio_logic_ongkir_v2';
+const STORAGE_KEY_ONGKIR = 'pakebox_studio_ongkir_v2';
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<MenuKey>('kalkulator-box');
@@ -508,10 +509,15 @@ export default function App() {
           if (missing.length > 0) {
             localStorage.setItem(STORAGE_KEY_ONGKIR, JSON.stringify(combined));
           }
-          return combined.map((it: ShippingRateItem) => ({
-            ...it,
-            maximumHarga: it.maximumHarga ?? calculateMaxOngkir(it.hargaPerKg, it.minimumHarga),
-          }));
+          return combined.map((it: ShippingRateItem) => {
+            const isLintas = it.service.toLowerCase().includes('lintas');
+            const maxWeight = it.maxWeightKg ?? (isLintas ? 35 : 25);
+            return {
+              ...it,
+              maxWeightKg: maxWeight,
+              maximumHarga: it.maximumHarga ?? calculateMaxOngkir(it.hargaPerKg, it.minimumHarga, maxWeight),
+            };
+          });
         }
       }
     } catch {
@@ -540,6 +546,7 @@ export default function App() {
   const [calcOngkirT, setCalcOngkirT] = useState<string>('0');
   const [calcOngkirQty, setCalcOngkirQty] = useState<string>('0');
   const [selectedShippingServiceId, setSelectedShippingServiceId] = useState<string | null>(null);
+  const [isCopiedRingkasanOngkir, setIsCopiedRingkasanOngkir] = useState<boolean>(false);
 
   // State: Kalkulator Box (Card Kiri Input - User hanya memilih Nama Bahan)
   const [calcModelId, setCalcModelId] = useState<string>(() => INITIAL_FORMULA_DATA[0]?.id || '');
@@ -1068,6 +1075,46 @@ export default function App() {
     if (calcL && calcL !== '0') setCalcOngkirL(calcL);
     if (calcT && calcT !== '0') setCalcOngkirT(calcT);
     if (calcQty && calcQty !== '0') setCalcOngkirQty(calcQty);
+  };
+
+  const handleCopyRingkasanOngkir = () => {
+    const serviceName = activeSelectedServiceOption?.service.service || '-';
+    const totalOngkirStr = activeSelectedServiceOption
+      ? formatRupiah(activeSelectedServiceOption.totalOngkir)
+      : 'Rp 0';
+    const koliStr = `${packingResult.totalKoli} koli`;
+    const estimasiStr = activeSelectedServiceOption?.service.estimasiTiba || '-';
+
+    const textToCopy = `Biaya      : ${totalOngkirStr} - ${serviceName}
+Total       : ${koliStr}
+Estimasi  : ${estimasiStr}
+
+FYI
+*1. ongkir di atas baru estimasi. kalau ada lebih akan di refund. kalau kurang akan di infokan.*
+*2. kalau ada ekspedisi murah bisa di infokan*`;
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setIsCopiedRingkasanOngkir(true);
+        setTimeout(() => setIsCopiedRingkasanOngkir(false), 2000);
+      });
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = textToCopy;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setIsCopiedRingkasanOngkir(true);
+        setTimeout(() => setIsCopiedRingkasanOngkir(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy', err);
+      }
+      document.body.removeChild(textArea);
+    }
   };
 
   // Handlers: Ketentuan Logika (Logika Model, Logika Mesin, Logika Harga)
@@ -1622,7 +1669,9 @@ export default function App() {
       return;
     }
 
-    const maxHargaVal = calculateMaxOngkir(hargaPerKgVal, minHargaVal);
+    const isLintasForm = trimmedService.toLowerCase().includes('lintas');
+    const maxWeightVal = editingOngkir?.maxWeightKg ?? (isLintasForm ? 35 : 25);
+    const maxHargaVal = calculateMaxOngkir(hargaPerKgVal, minHargaVal, maxWeightVal);
 
     if (editingOngkir) {
       setOngkirItems((prev) =>
@@ -1637,6 +1686,7 @@ export default function App() {
                 hargaPerKg: hargaPerKgVal,
                 minimumHarga: minHargaVal,
                 maximumHarga: maxHargaVal,
+                maxWeightKg: maxWeightVal,
               }
             : it
         )
@@ -5035,6 +5085,78 @@ export default function App() {
                     </div>
                   </section>
 
+                  {/* CARD 2 KIRI: Ringkasan Ongkir & Tombol Salin */}
+                  <section className="rounded-xl border border-[#D4AF37]/35 bg-[#0C2017] p-4 sm:p-5 shadow-lg space-y-3.5 relative overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-[#D4AF37]/20 pb-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#D4AF37]" />
+                        <h3 className="text-xs sm:text-sm font-bold text-[#E5C158] uppercase tracking-wide">
+                          Ringkasan Ongkir
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyRingkasanOngkir}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#D4AF37]/45 bg-[#122D22] hover:bg-[#193B2D] px-2.5 py-1 text-xs font-semibold text-[#F3D77D] hover:text-[#FFF0B8] transition-all cursor-pointer shadow-xs active:scale-95"
+                        title="Salin format ringkasan ongkir"
+                      >
+                        {isCopiedRingkasanOngkir ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-400 stroke-[2.5]" />
+                            <span className="text-emerald-400">Tersalin!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5 text-[#D4AF37]" />
+                            <span>Salin</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Format Tampilan Ringkasan */}
+                    <div className="rounded-lg border border-[#D4AF37]/20 bg-[#081610] p-3 space-y-2 text-xs font-mono-tabular">
+                      <div className="flex items-baseline">
+                        <span className="text-[#8FA599] font-medium w-20 shrink-0">Biaya</span>
+                        <span className="text-[#8FA599] mr-2 shrink-0">:</span>
+                        <span className="font-bold text-emerald-400 break-words">
+                          {activeSelectedServiceOption
+                            ? `${formatRupiah(activeSelectedServiceOption.totalOngkir)} - ${activeSelectedServiceOption.service.service}`
+                            : 'Rp 0 - (Pilih Rute & Layanan)'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline">
+                        <span className="text-[#8FA599] font-medium w-20 shrink-0">Total</span>
+                        <span className="text-[#8FA599] mr-2 shrink-0">:</span>
+                        <span className="font-bold text-[#F4F1EA]">
+                          {packingResult.totalKoli} koli
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline">
+                        <span className="text-[#8FA599] font-medium w-20 shrink-0">Estimasi</span>
+                        <span className="text-[#8FA599] mr-2 shrink-0">:</span>
+                        <span className="font-semibold text-[#F3D77D]">
+                          {activeSelectedServiceOption?.service.estimasiTiba || '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Box Catatan FYI */}
+                    <div className="rounded-lg border border-[#D4AF37]/20 bg-[#122D22]/60 p-3 space-y-1.5 text-[11px] leading-relaxed">
+                      <div className="font-bold text-[#E5C158] uppercase tracking-wider text-[10.5px]">
+                        FYI
+                      </div>
+                      <p className="italic text-[#C5B896]">
+                        *1. ongkir di atas baru estimasi. kalau ada lebih akan di refund. kalau kurang akan di infokan.*
+                      </p>
+                      <p className="italic text-[#C5B896]">
+                        *2. kalau ada ekspedisi murah bisa di infokan*
+                      </p>
+                    </div>
+                  </section>
+
                   {/* CARD TAMBAHAN DI BAWAH CARD KIRI: Kardus yang Kita Punya (55 x 55 x 40) */}
                   <section className="rounded-xl border border-[#D4AF37]/35 bg-[#122D22]/80 p-4 sm:p-5 shadow-lg space-y-3 relative overflow-hidden">
                     <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none">
@@ -5284,7 +5406,13 @@ export default function App() {
 
                                   {opt.service.service.toLowerCase().includes('paxel big') && (
                                     <span className="rounded border border-amber-500/35 bg-amber-950/50 px-2 py-0.5 text-[9.5px] font-semibold text-amber-300">
-                                      Maks {formatRupiah(opt.service.maximumHarga || 0)} / koli
+                                      Maks {formatRupiah(opt.service.maximumHarga || 0)} / koli (25 kg)
+                                    </span>
+                                  )}
+
+                                  {opt.service.service.toLowerCase().includes('lintas') && (
+                                    <span className="rounded border border-emerald-500/35 bg-emerald-950/50 px-2 py-0.5 text-[9.5px] font-semibold text-emerald-300">
+                                      Batas Maks 35 kg / koli
                                     </span>
                                   )}
                                 </div>
@@ -5299,7 +5427,8 @@ export default function App() {
                                   </span>
                                   <span>•</span>
                                   <span>
-                                    Max (Batas 25kg): <strong className="text-[#F3D77D]">{formatRupiah(opt.service.maximumHarga || 0)}</strong>
+                                    Max (Batas {opt.service.maxWeightKg ?? (opt.service.service.toLowerCase().includes('lintas') ? 35 : 25)}kg):{' '}
+                                    <strong className="text-[#F3D77D]">{formatRupiah(opt.service.maximumHarga || 0)}</strong>
                                   </span>
                                 </div>
                               </div>
